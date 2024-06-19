@@ -8,8 +8,8 @@ udds_time = meas.Time; % UDDS 시간 데이터
 
 % Load SOC-OCV structure
 load('soc_ocv.mat', 'soc_ocv'); %c/20에서 가져온 soc-ocv lookup table
-soc_values = soc_ocv(:, 1);
-ocv_values = soc_ocv(:, 2);
+soc_values = soc_ocv(:, 1); % soc
+ocv_values = soc_ocv(:, 2); % ocv
 
 % Configuration parameters
 Config.dt = mean(diff(udds_time)); % 평균 시간 간격
@@ -17,7 +17,7 @@ Config.ik = udds_current(1); % 초기 전류
 Config.R0 = 0.001884314;
 Config.R1 = 0.045801322;
 Config.C1 = 4846.080679;
-Config.cap = (2.99 * 3600) / 100; % nominal capacity [Ah]
+Config.cap = 2.6139; % nominal capacity [Ah]
 Config.coulomb_efficient = 1;
 
 % Remove duplicate OCV values
@@ -88,7 +88,7 @@ function [SOC_est, V1_est, Vt_est, P] = soc_estimation(SOC_est, V1_est, Vt_true,
     R = 1e-2; % Measurement noise covariance
     
     % Prediction step (상태방정식)
-    SOC_pred = SOC_est + (Config.dt / Config.cap) * Config.coulomb_efficient * ik;
+    SOC_pred = SOC_est + (Config.dt / Config.cap * 3600 ) * Config.coulomb_efficient * ik;
     V1_pred = exp(-Config.dt / (Config.R1 * Config.C1)) * V1_est + (1 - exp(-Config.dt / (Config.R1 * Config.C1))) * ik * Config.R1;
     X_pred = [SOC_pred; V1_pred];
     
@@ -100,7 +100,7 @@ function [SOC_est, V1_est, Vt_est, P] = soc_estimation(SOC_est, V1_est, Vt_true,
     P_predict = A * P * A' + Q; % p predict 예측 과정
     
     % Measurement prediction (OCV = 전류적산법으로 얻은 SOC로부터 lookup table 통과시켜 얻음)
-    Vt_pred = interp1(soc_values, ocv_values, SOC_pred, 'linear', 'extrap') - Config.R1 * V1_pred - Config.R0 * ik;
+    Vt_pred = interp1(soc_values, ocv_values, SOC_pred, 'linear', 'extrap') - V1_pred - Config.R0 * ik; % 수정 (R * V1 pred --> V1 pred)
     
     % H 행렬 계산
     OCV_H = interp1(soc_values, ocv_values, SOC_pred, 'linear', 'extrap');
@@ -116,7 +116,7 @@ function [SOC_est, V1_est, Vt_est, P] = soc_estimation(SOC_est, V1_est, Vt_true,
     K = P_predict * H_k' / (H_k * P_predict * H_k' + R); % Kalman gain 계산
     z = Vt_true - Vt_pred; % Measurement residual
     X_pred = X_pred + K * z; % 상태 변수 업데이트
-    P = P_predict - K * H_k * P_predict; % 공분산 업데이트
+    P = P_predict - K * H_k * P_predict; % 공분산 업데이트 % 식 jpg 에 있는 식으로 변형 
     
     % Save estimates
     SOC_est = X_pred(1);
