@@ -11,14 +11,8 @@ load('soc_ocv.mat', 'soc_ocv');
 soc_values = soc_ocv(:, 1);
 ocv_values = soc_ocv(:, 2);
 
-% Configuration parameters
-Config.dt = mean(diff(udds_time)); % 평균 시간 간격
-Config.ik = udds_current(1); % 초기 전류
-Config.R0 = 0.001884314;
-Config.R1 = 0.045801322;
-Config.C1 = 4846.080679;
-Config.cap = (2.99 * 3600) / 100; % nominal capacity [Ah]
-Config.coulomb_efficient = 1;
+% Initialize configuration
+Config = initialize_config(udds_time, udds_current);
 
 % Initialize SOC estimation
 SOC_est = zeros(length(udds_current), 1);
@@ -46,12 +40,12 @@ for k = 2:length(udds_current)
     true_SOC(k) = true_SOC(k-1) - (udds_current(k) * delta_t) / (Config.cap * 3600);
 
     % SOC estimation using EKF
-    [SOC_est(k), V1_est(k), Vt_est(k), P] = soc_estimation(SOC_est(k-1), V1_est(k-1), udds_voltage(k), Config.ik, Config, P, soc_values, ocv_values);
+    [SOC_est(k), V1_est(k), Vt_est(k), P] = kalman_filter(SOC_est(k-1), V1_est(k-1), udds_voltage(k), Config.ik, Config, P, soc_values, ocv_values);
 end
 
 % Plot SOC
 figure;
-plot(udds_time, true_SOC, 'b', 'LineWidth', 1.5); hold on;
+%plot(udds_time, true_SOC, 'b', 'LineWidth', 1.5); hold on;
 plot(udds_time, SOC_est, 'r--', 'LineWidth', 1.5);
 xlabel('Time (s)');
 ylabel('SOC');
