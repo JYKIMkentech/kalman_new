@@ -73,6 +73,8 @@ for j = step_ocv_chg'
     end
 end
 
+data(4).soc = soc;
+
 % SOC-OCV 구조체 생성
 soc_ocv = [SOC OCV];
 
