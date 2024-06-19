@@ -26,7 +26,7 @@ intVar.Vt = zeros(1, num_steps);
 % Initialize with the initial state
 intVar.SOC(1) = SOC_initial;
 intVar.V1(1) = V1_initial;
-intVar.Vt(1) = OCV(SOC_initial) - Config.R1 * V1_initial - Config.R0 * Config.ik;
+intVar.Vt(1) = ocv_soc(SOC_initial) - Config.R1 * V1_initial - Config.R0 * Config.ik;
 
 % Simulation loop
 for k = 2:num_steps
@@ -34,7 +34,7 @@ for k = 2:num_steps
     [intVar.SOC(k), intVar.Vt(k)] = battery_model(intVar.SOC(k-1), intVar.V1(k-1), Config.ik, Config);
     
     % SOC estimation
-    [intVar.SOC(k), intVar.V1(k), intVar.Vt(k)] = soc_estimation(intVar.SOC(k-1), intVar.V1(k-1), intVar.Vt(k), Config.ik, Config, P);
+    [intVar.SOC(k), intVar.V1(k), intVar.Vt(k), P] = soc_estimation(intVar.SOC(k-1), intVar.V1(k-1), intVar.Vt(k), Config.ik, Config, P);
 end
 
 % Plot SOC
@@ -56,8 +56,3 @@ ylabel('V_t (V)');
 title('True V_t vs Estimated V_t');
 legend('True V_t', 'Estimated V_t');
 grid on;
-
-function v_ocv = OCV(soc)
-    % OCV-SOC relationship
-    v_ocv = 2.58 * soc + 3.81 * exp(-35.8 * soc) - 0.3 * exp(-9.8 * soc);
-end

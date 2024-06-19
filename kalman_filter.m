@@ -14,7 +14,7 @@ function [SOC_est, V1_est, Vt_est, P] = kalman_filter(SOC_est, V1_est, Vt_true, 
     P = A * P * A' + Q;
     
     % Measurement prediction
-    Vt_pred = OCV(SOC_pred) - Config.R1 * V1_pred - Config.R0 * ik;
+    Vt_pred = ocv_soc(SOC_pred) - Config.R1 * V1_pred - Config.R0 * ik;
     
     % Measurement update
     K = P * [1; 0] / (P(1, 1) + R); % Kalman gain
@@ -26,9 +26,4 @@ function [SOC_est, V1_est, Vt_est, P] = kalman_filter(SOC_est, V1_est, Vt_true, 
     SOC_est = X_pred(1);
     V1_est = X_pred(2);
     Vt_est = Vt_pred + K(1) * z; % Estimated Vt
-end
-
-function v_ocv = OCV(soc)
-    % OCV-SOC relationship
-    v_ocv = 2.58 * soc + 3.81 * exp(-35.8 * soc) - 0.3 * exp(-9.8 * soc);
 end
