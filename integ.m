@@ -56,10 +56,10 @@ for k = 2:length(udds_current)
     true_SOC(k) = true_SOC(k-1) + (udds_current(k) * delta_t) / (Config.cap * 3600); % 실제 soc = 전 soc + i * dt/q_total (sampling 시간 동안 흐르는 전류)
 
     % SOC estimation using EKF
-    [SOC_est(k), V1_est(k), Vt_est(k), P] = soc_estimation(SOC_est(k-1), V1_est(k-1), udds_voltage(k), Config.ik, Config, P, soc_values, ocv_values); % 추정 코드
+    [SOC_est(k), V1_est(k), Vt_est(k), P] = soc_estimation(SOC_est(k-1), V1_est(k-1), udds_voltage(k), udds_current(k), Config, P, soc_values, ocv_values); % 추정 코드
 end
 
-% Plot SOC
+% Plot SOCrm
 figure;
 plot(udds_time, true_SOC, 'b', 'LineWidth', 1.5); hold on;
 plot(udds_time, SOC_est, 'r--', 'LineWidth', 1.5);
@@ -96,7 +96,7 @@ function [SOC_est, V1_est, Vt_est, P] = soc_estimation(SOC_est, V1_est, Vt_true,
     % Process covariance update
     P = A * P * A' + Q; % predict 과정에서 공분산 계산 
     
-    % Measurement prediction
+    % Measurement prediction (ocv = 전류적산법으로 얻은 soc로부터 lookup table 통과시켜 얻음)
     Vt_pred = interp1(soc_values, ocv_values, SOC_pred, 'linear', 'extrap') - Config.R1 * V1_pred - Config.R0 * ik; % 모델식으로 부터 단자 전압 예측 ( Vt = ocv - IR1 - IR0) 
     
     % Measurement update
