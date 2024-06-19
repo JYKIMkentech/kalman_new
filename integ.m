@@ -53,10 +53,10 @@ for k = 2:length(udds_current)
 
     % True SOC calculation using coulomb counting
     delta_t = udds_time(k) - udds_time(k-1); % dt 써도 되는데, 정확한 값을 위하여... (비교해보니까 거의 비슷하긴 함) 
-    true_SOC(k) = true_SOC(k-1) - (udds_current(k) * delta_t) / (Config.cap * 3600);
+    true_SOC(k) = true_SOC(k-1) + (udds_current(k) * delta_t) / (Config.cap * 3600); % 실제 soc = 전 soc + i * dt/q_total (sampling 시간 동안 흐르는 전류)
 
     % SOC estimation using EKF
-    [SOC_est(k), V1_est(k), Vt_est(k), P] = soc_estimation(SOC_est(k-1), V1_est(k-1), udds_voltage(k), Config.ik, Config, P, soc_values, ocv_values);
+    [SOC_est(k), V1_est(k), Vt_est(k), P] = soc_estimation(SOC_est(k-1), V1_est(k-1), udds_voltage(k), Config.ik, Config, P, soc_values, ocv_values); % 추정 코드
 end
 
 % Plot SOC
@@ -84,29 +84,30 @@ function [SOC_est, V1_est, Vt_est, P] = soc_estimation(SOC_est, V1_est, Vt_true,
     Q = [1e-5 0; 0 1e-5]; % Process noise covariance
     R = 1e-2; % Measurement noise covariance
     
-    % Prediction step
-    SOC_pred = SOC_est - (Config.dt / Config.cap) * Config.coulomb_efficient * ik;
+    % Prediction step (상태방정식)
+    SOC_pred = SOC_est + (Config.dt / Config.cap) * Config.coulomb_efficient * ik; % 전 상태 soc에서 predict, 부호 플러스 맞지 않나???
     V1_pred = exp(-Config.dt / (Config.R1 * Config.C1)) * V1_est + (1 - exp(-Config.dt / (Config.R1 * Config.C1))) * ik * Config.R1;
-    X_pred = [SOC_pred; V1_pred];
+    X_pred = [SOC_pred; V1_pred]; % 상태 방정식 변수 (soc, v1) , 전 상태 soc에서 predict, v1 predict 값 저장 
     
     % State transition matrix
-    A = [1, 0; 0, exp(-Config.dt / (Config.R1 * Config.C1))];
+    A = [1, 0;
+        0, exp(-Config.dt / (Config.R1 * Config.C1))];
     
     % Process covariance update
-    P = A * P * A' + Q;
+    P = A * P * A' + Q; % predict 과정에서 공분산 계산 
     
     % Measurement prediction
-    Vt_pred = interp1(soc_values, ocv_values, SOC_pred, 'linear', 'extrap') - Config.R1 * V1_pred - Config.R0 * ik;
+    Vt_pred = interp1(soc_values, ocv_values, SOC_pred, 'linear', 'extrap') - Config.R1 * V1_pred - Config.R0 * ik; % 모델식으로 부터 단자 전압 예측 ( Vt = ocv - IR1 - IR0) 
     
     % Measurement update
-    K = P * [1; 0] / (P(1, 1) + R); % Kalman gain
-    z = Vt_true - Vt_pred; % Measurement residual
-    X_pred = X_pred + K * z;
-    P = (eye(2) - K * [1, 0]) * P;
+    K = P * [1; 0] / (P(1, 1) + R); % Kalman gain , H = [1 0]으로 했는데 이거 수정 필요 
+    z = Vt_true - Vt_pred; % Measurement residual, Vt_true = udds_voltage(측정된 전압) , Vt_pred = 배터리 1rc 모델로부터 (계산된 전압) 
+    X_pred = X_pred + K * z; % 전압 차이와 칼만 게인을 곱하여, 상태 변수 업데이트 
+    P = (eye(2) - K * [1, 0]) * P; % 공분산 업데이트 
     
     % Save estimates
     SOC_est = X_pred(1);
     V1_est = X_pred(2);
-    Vt_est = Vt_pred + K(1) * z; % Estimated Vt
+    Vt_est = Vt_pred + K(1) * z; % Estimated Vt가 업데이트 (from RC model에서 얻은 계산 전압 + 칼만게인 x 오차)
 end
 

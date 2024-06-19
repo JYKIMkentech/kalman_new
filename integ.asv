@@ -45,15 +45,15 @@ P = eye(2); % Initial estimation error covariance
 V1_est = zeros(length(udds_current), 1);
 Vt_est = zeros(length(udds_current), 1);
 V1_est(1) = udds_current(1) * Config.R1 * (1 - exp(-Config.dt / (Config.R1 * Config.C1))); % 초기 V1 값 (전 상태의 v1값이 없기때문에 앞의 항이 zero)
-Vt_est(1) = udds_voltage(1); % 초기 측정 전압 = estimated voltage
+Vt_est(1) = udds_voltage(1); % 초기 측정 전압 = estimated 전압 
 
 % Simulation loop
 for k = 2:length(udds_current)
-    Config.ik = udds_current(k);
+    Config.ik = udds_current(k); % 샘플링 시간동안 흐르는 전류 
 
     % True SOC calculation using coulomb counting
-    delta_t = udds_time(k) - udds_time(k-1);
-    true_SOC(k) = true_SOC(k-1) - (udds_current(k) * delta_t) / (Config.cap * 3600);
+    delta_t = udds_time(k) - udds_time(k-1); % dt 써도 되는데, 정확한 값을 위하여... (비교해보니까 거의 비슷하긴 함) 
+    true_SOC(k) = true_SOC(k-1) + (udds_current(k) * delta_t) / (Config.cap * 3600); % 실제 soc = 전 soc + it/q_total 
 
     % SOC estimation using EKF
     [SOC_est(k), V1_est(k), Vt_est(k), P] = soc_estimation(SOC_est(k-1), V1_est(k-1), udds_voltage(k), Config.ik, Config, P, soc_values, ocv_values);
