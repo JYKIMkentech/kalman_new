@@ -39,7 +39,8 @@ true_SOC = zeros(length(udds_current), 1);
 true_SOC(1) = initial_soc; 
 
 % EKF 초기화
-P = eye(2); % Initial estimation error covariance
+P = [1 0;
+    0 1]; % Initial estimation error covariance
 
 % Preallocate arrays for V1 and Vt
 V1_est = zeros(length(udds_current), 1);
@@ -81,7 +82,9 @@ grid on;
 
 % SOC 추정 함수
 function [SOC_est, V1_est, Vt_est, P] = soc_estimation(SOC_est, V1_est, Vt_true, ik, Config, P, soc_values, ocv_values)
-    Q = [1e-5 0; 0 1e-5]; % Process noise covariance
+    Q = [1e-5 0; 
+        0 1e-5]; % Process noise covariance
+
     R = 1e-2; % Measurement noise covariance
     
     % Prediction step (상태방정식)
@@ -94,25 +97,29 @@ function [SOC_est, V1_est, Vt_est, P] = soc_estimation(SOC_est, V1_est, Vt_true,
          0, exp(-Config.dt / (Config.R1 * Config.C1))];
     
     % Process covariance update
-    P = A * P * A' + Q;
+    P_predict = A * P * A' + Q; % p predict 예측 과정
     
     % Measurement prediction (OCV = 전류적산법으로 얻은 SOC로부터 lookup table 통과시켜 얻음)
     Vt_pred = interp1(soc_values, ocv_values, SOC_pred, 'linear', 'extrap') - Config.R1 * V1_pred - Config.R0 * ik;
     
     % H 행렬 계산
-    dOCV_dSOC = (interp1(soc_values, ocv_values, SOC_pred + 1e-5, 'linear', 'extrap') - ...
-                 interp1(soc_values, ocv_values, SOC_pred, 'linear', 'extrap')) / 1e-5;
-    H = [dOCV_dSOC, -1];
+    OCV_H = interp1(soc_values, ocv_values, SOC_pred, 'linear', 'extrap');
+    OCV_H_before = interp1(soc_values, ocv_values, SOC_est, 'linear', 'extrap');
+    
+    if SOC_pred == SOC_est
+        H_k = [0 -1];
+    else
+        H_k = [(OCV_H - OCV_H_before) / (SOC_pred - SOC_est), -1];
+    end
     
     % Measurement update
-    K = P * H' / (H * P * H' + R); % Kalman gain
+    K = P_predict * H_k' / (H_k * P_predict * H_k' + R); % Kalman gain 계산
     z = Vt_true - Vt_pred; % Measurement residual
     X_pred = X_pred + K * z; % 상태 변수 업데이트
-    P = (eye(2) - K * H) * P; % 공분산 업데이트
+    P = P_predict - K * H_k * P_predict; % 공분산 업데이트
     
     % Save estimates
     SOC_est = X_pred(1);
     V1_est = X_pred(2);
     Vt_est = Vt_pred + K(1) * z; % Estimated Vt 업데이트
 end
-
