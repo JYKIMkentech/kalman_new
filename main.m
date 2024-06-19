@@ -1,58 +1,70 @@
-clear;
-clc;
+clc; clear; close all;
+
+% Load UDDS data
+load('C:\Users\USER\Desktop\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\Drive cycles\03-21-17_00.29 25degC_UDDS_Pan18650PF.mat');
+udds_current = meas.Current; % UDDS 전류 데이터
+udds_voltage = meas.Voltage; % UDDS 전압 데이터
+udds_time = meas.Time; % UDDS 시간 데이터
+
+% Load SOC-OCV structure
+load('soc_ocv.mat', 'soc_ocv');
+soc_values = soc_ocv(:, 1);
+ocv_values = soc_ocv(:, 2);
 
 % Configuration parameters
-Config.dt = 1;
-Config.ik = 0.41; % Discharge current [A]
+Config.dt = mean(diff(udds_time)); % 평균 시간 간격
+Config.ik = udds_current(1); % 초기 전류
 Config.R0 = 0.001884314;
 Config.R1 = 0.045801322;
 Config.C1 = 4846.080679;
-Config.cap = (4.32019 * 3600) / 100; % nominal capacity [Ah]
+Config.cap = (2.99 * 3600) / 100; % nominal capacity [Ah]
 Config.coulomb_efficient = 1;
 
-% Initial conditions
-SOC_initial = 1;
-V1_initial = Config.ik * Config.R1 * (1 - exp(-Config.dt / (Config.R1 * Config.C1)));
+% Initialize SOC estimation
+SOC_est = zeros(length(udds_current), 1);
+SOC_est(1) = 1; % 초기 SOC는 100%로 가정
 
-% EKF initialization
+% Initialize true SOC using coulomb counting
+true_SOC = zeros(length(udds_current), 1);
+true_SOC(1) = 1; % 초기 SOC는 100%로 가정
+
+% EKF 초기화
 P = eye(2); % Initial estimation error covariance
 
-% Preallocate arrays for SOC, V1, and Vt
-num_steps = 10; % Define the number of time steps for the simulation
-intVar.SOC = zeros(1, num_steps);
-intVar.V1 = zeros(1, num_steps);
-intVar.Vt = zeros(1, num_steps);
-
-% Initialize with the initial state
-intVar.SOC(1) = SOC_initial;
-intVar.V1(1) = V1_initial;
-intVar.Vt(1) = ocv_soc(SOC_initial) - Config.R1 * V1_initial - Config.R0 * Config.ik;
+% Preallocate arrays for V1 and Vt
+V1_est = zeros(length(udds_current), 1);
+Vt_est = zeros(length(udds_current), 1);
+V1_est(1) = udds_current(1) * Config.R1 * (1 - exp(-Config.dt / (Config.R1 * Config.C1))); % 초기 V1 값
+Vt_est(1) = udds_voltage(1);
 
 % Simulation loop
-for k = 2:num_steps
-    % True SOC and Vt calculation
-    [intVar.SOC(k), intVar.Vt(k)] = battery_model(intVar.SOC(k-1), intVar.V1(k-1), Config.ik, Config);
-    
-    % SOC estimation
-    [intVar.SOC(k), intVar.V1(k), intVar.Vt(k), P] = soc_estimation(intVar.SOC(k-1), intVar.V1(k-1), intVar.Vt(k), Config.ik, Config, P);
+for k = 2:length(udds_current)
+    Config.ik = udds_current(k);
+
+    % True SOC calculation using coulomb counting
+    delta_t = udds_time(k) - udds_time(k-1);
+    true_SOC(k) = true_SOC(k-1) - (udds_current(k) * delta_t) / (Config.cap * 3600);
+
+    % SOC estimation using EKF
+    [SOC_est(k), V1_est(k), Vt_est(k), P] = soc_estimation(SOC_est(k-1), V1_est(k-1), udds_voltage(k), Config.ik, Config, P, soc_values, ocv_values);
 end
 
 % Plot SOC
 figure;
-plot(1:num_steps, intVar.SOC, 'b', 'LineWidth', 1.5); hold on;
-plot(1:num_steps, intVar.SOC, 'r--', 'LineWidth', 1.5);
-xlabel('Time Step');
+plot(udds_time, true_SOC, 'b', 'LineWidth', 1.5); hold on;
+plot(udds_time, SOC_est, 'r--', 'LineWidth', 1.5);
+xlabel('Time (s)');
 ylabel('SOC');
-title('True SOC vs Estimated SOC');
+title('True SOC vs Estimated SOC during UDDS Cycle');
 legend('True SOC', 'Estimated SOC');
 grid on;
 
 % Plot Vt
 figure;
-plot(1:num_steps, intVar.Vt, 'b', 'LineWidth', 1.5); hold on;
-plot(1:num_steps, intVar.Vt, 'r--', 'LineWidth', 1.5);
-xlabel('Time Step');
+plot(udds_time, udds_voltage, 'b', 'LineWidth', 1.5); hold on;
+plot(udds_time, Vt_est, 'r--', 'LineWidth', 1.5);
+xlabel('Time (s)');
 ylabel('V_t (V)');
-title('True V_t vs Estimated V_t');
-legend('True V_t', 'Estimated V_t');
+title('Measured vs Estimated Terminal Voltage during UDDS Cycle');
+legend('Measured V_t', 'Estimated V_t');
 grid on;

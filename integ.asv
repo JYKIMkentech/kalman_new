@@ -13,6 +13,7 @@ ocv_values = soc_ocv(:, 2);
 
 % Configuration parameters
 Config.dt = mean(diff(udds_time)); % 평균 시간 간격
+Config.ik = udds_current(1); % 초기 전류
 Config.R0 = 0.001884314;
 Config.R1 = 0.045801322;
 Config.C1 = 4846.080679;
@@ -36,13 +37,13 @@ Vt_est = zeros(length(udds_current), 1);
 V1_est(1) = udds_current(1) * Config.R1 * (1 - exp(-Config.dt / (Config.R1 * Config.C1))); % 초기 V1 값
 Vt_est(1) = udds_voltage(1);
 
-% Calculate true SOC
-true_SOC = calculate_true_soc(udds_current, diff([0; udds_time]), Config.cap, true_SOC(1));
-
 % Simulation loop
 for k = 2:length(udds_current)
-    % Calculate average current over the sampling interval
     Config.ik = udds_current(k);
+
+    % True SOC calculation using coulomb counting
+    delta_t = udds_time(k) - udds_time(k-1);
+    true_SOC(k) = true_SOC(k-1) - (udds_current(k) * delta_t) / (Config.cap * 3600);
 
     % SOC estimation using EKF
     [SOC_est(k), V1_est(k), Vt_est(k), P] = soc_estimation(SOC_est(k-1), V1_est(k-1), udds_voltage(k), Config.ik, Config, P, soc_values, ocv_values);
@@ -67,37 +68,6 @@ ylabel('V_t (V)');
 title('Measured vs Estimated Terminal Voltage during UDDS Cycle');
 legend('Measured V_t', 'Estimated V_t');
 grid on;
-
-% Function to calculate true SOC using coulomb counting
-function soc = calculate_true_soc(current, dt, capacity, prev_soc)
-    % Initialize SOC array
-    soc = zeros(length(current), 1);
-    soc(1) = prev_soc;
-    
-    % Loop through the current data
-    for i = 2:length(current)
-        delta_t = dt(i);
-        if current(i) < 0 % Discharging
-            soc(i) = soc(i-1) + (current(i) * delta_t) / (capacity * 3600);
-        else % Charging
-            soc(i) = soc(i-1) + (current(i) * delta_t) / (capacity * 3600);
-        end
-    end
-end
-
-% OCV 함수
-function v_ocv = ocv_soc(soc, soc_values, ocv_values)
-    v_ocv = interp1(soc_values, ocv_values, soc, 'linear', 'extrap');
-end
-
-% 배터리 모델 함수
-function [SOC_true, Vt_true] = battery_model(SOC_prev, V1_prev, ik, Config)
-    load('soc_ocv.mat', 'soc_ocv');
-    soc_values = soc_ocv(:, 1);
-    ocv_values = soc_ocv(:, 2);
-    SOC_true = SOC_prev - (Config.dt / Config.cap) * Config.coulomb_efficient * ik;
-    Vt_true = ocv_soc(SOC_true, soc_values, ocv_values) - Config.R1 * V1_prev - Config.R0 * ik;
-end
 
 % SOC 추정 함수
 function [SOC_est, V1_est, Vt_est, P] = soc_estimation(SOC_est, V1_est, Vt_true, ik, Config, P, soc_values, ocv_values)
@@ -129,5 +99,4 @@ function [SOC_est, V1_est, Vt_est, P] = soc_estimation(SOC_est, V1_est, Vt_true,
     V1_est = X_pred(2);
     Vt_est = Vt_pred + K(1) * z; % Estimated Vt
 end
-
 
