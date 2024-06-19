@@ -17,7 +17,7 @@ Config.ik = udds_current(1); % 초기 전류
 Config.R0 = 0.001884314;
 Config.R1 = 0.045801322;
 Config.C1 = 4846.080679;
-Config.cap = 2.6139; % nominal capacity [Ah]
+Config.cap = 2.6139; % nominal capacity [Ah] 
 Config.coulomb_efficient = 1;
 
 % Remove duplicate OCV values
