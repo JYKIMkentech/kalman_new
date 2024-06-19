@@ -32,11 +32,11 @@ fprintf('Initial voltage: %.2f V corresponds to SOC: %.2f%%\n', initial_voltage,
 
 % Initialize SOC estimation
 SOC_est = zeros(length(udds_current), 1);
-SOC_est(1) = initial_soc; % 초기 SOC는 100%로 가정 % 완충상태 가정 (udds voltage 4.18v) 
+SOC_est(1) = initial_soc; % (udds voltage 4.18v) 
 
 % Initialize true SOC using coulomb counting
 true_SOC = zeros(length(udds_current), 1);
-true_SOC(1) = initial_soc; % 초기 SOC는 100%로 가정
+true_SOC(1) = initial_soc; 
 
 % EKF 초기화
 P = eye(2); % Initial estimation error covariance
