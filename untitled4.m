@@ -13,10 +13,11 @@ ocv_values = soc_ocv(:, 2); % ocv
 
 % Configuration parameters
 Config.dt = mean(diff(udds_time)); % 평균 시간 간격
+Config.ik = udds_current(1); % 초기 전류
 Config.R0 = 0.001884314;
 Config.R1 = 0.045801322;
-Config.C1 = 4846.080679 ;
-Config.cap = 2.90; % nominal capacity [Ah] 
+Config.C1 = 4846.080679 * 1e-6;
+Config.cap = (2.99 * 3600) / 100; % nominal capacity [Ah] 
 Config.coulomb_efficient = 1;
 
 % Remove duplicate OCV values
@@ -38,14 +39,24 @@ true_SOC = zeros(length(udds_current), 1);
 true_SOC(1) = initial_soc; 
 
 % EKF 초기화
-P = [1 0;
-    0 1]; % Initial estimation error covariance
+P = [3000 0;
+    0 3000]; % Initial estimation error covariance
 
 % Preallocate arrays for V1 and Vt
 V1_est = zeros(length(udds_current), 1);
 Vt_est = zeros(length(udds_current), 1);
 V1_est(1) = udds_current(1) * Config.R1 * (1 - exp(-Config.dt / (Config.R1 * Config.C1))); % 초기 V1 값 (전 상태의 v1값이 없기때문에 앞의 항이 zero)
 Vt_est(1) = udds_voltage(1); % 초기 측정 전압 = estimated 전압 
+
+% State transition function
+stateTransitionFcn = @(x, u) [x(1) + (Config.dt / Config.cap * 3600) * Config.coulomb_efficient * u; ...
+                              exp(-Config.dt / (Config.R1 * Config.C1)) * x(2) + (1 - exp(-Config.dt / (Config.R1 * Config.C1))) * u * Config.R1];
+
+% Measurement function
+measurementFcn = @(x, u) interp1(unique_ocv_values, unique_soc_values, x(1), 'linear', 'extrap') - x(2) - Config.R0 * u;
+
+% Create EKF object
+ekf = extendedKalmanFilter(stateTransitionFcn, measurementFcn, [SOC_est(1); V1_est(1)], 'MeasurementNoise', 8000, 'ProcessNoise', [1e-5, 0; 0, 1e-5]);
 
 % Simulation loop
 for k = 2:length(udds_current)
@@ -55,11 +66,17 @@ for k = 2:length(udds_current)
     delta_t = Config.dt; % dt 써도 되는데, 정확한 값을 위하여... (비교해보니까 거의 비슷하긴 함) 
     true_SOC(k) = true_SOC(k-1) + (udds_current(k) * delta_t) / (Config.cap * 3600); % 실제 soc = 전 soc + i * dt/q_total (sampling 시간 동안 흐르는 전류)
 
-    % SOC estimation using EKF
-    [SOC_est(k), V1_est(k), Vt_est(k), P] = soc_estimation(SOC_est(k-1), V1_est(k-1), udds_voltage(k), udds_current(k), Config, P, unique_soc_values, unique_ocv_values); % 추정 코드
+    % Prediction and correction step
+    [predictedState, P] = predict(ekf, udds_current(k));
+    [correctedState, P] = correct(ekf, udds_voltage(k), udds_current(k));
+    
+    % Save estimates
+    SOC_est(k) = correctedState(1);
+    V1_est(k) = correctedState(2);
+    Vt_est(k) = measurementFcn(predictedState, udds_current(k)); % Estimated Vt 업데이트
 end
 
-% Plot SOCrm
+% Plot SOC
 figure;
 plot(udds_time, true_SOC, 'b', 'LineWidth', 1.5); hold on;
 plot(udds_time, SOC_est, 'r--', 'LineWidth', 1.5);
@@ -78,55 +95,4 @@ ylabel('V_t (V)');
 title('Measured vs Estimated Terminal Voltage during UDDS Cycle');
 legend('Measured V_t', 'Estimated V_t');
 grid on;
-
-% SOC 추정 함수
-function [SOC_est, V1_est, Vt_est, P] = soc_estimation(SOC_est, V1_est, Vt_true, ik, Config, P, soc_values, ocv_values)
-    Q = [1e-5 0; 
-         0 1e-5]; % Process noise covariance
-    R = 1000; % Measurement noise covariance
-
-    % Prediction step (상태방정식)
-    SOC_pred = SOC_est + (Config.dt / (Config.cap * 3600)) * Config.coulomb_efficient * ik;
-    V1_pred = exp(-Config.dt / (Config.R1 * Config.C1)) * V1_est + (1 - exp(-Config.dt / (Config.R1 * Config.C1))) * ik * Config.R1;
-    X_pred = [SOC_pred; V1_pred];
-
-   
-    % State transition matrix
-    A = [1, 0;
-         0, exp(-Config.dt / (Config.R1 * Config.C1))];
-    
-    % Process covariance update
-    P_predict = A * P * A' + Q; % p predict 예측 과정
-    
-    % Measurement prediction (OCV = 전류적산법으로 얻은 SOC로부터 lookup table 통과시켜 얻음)
-    Vt_pred = interp1(soc_values, ocv_values, SOC_pred, 'linear', 'extrap') + V1_pred + Config.R0 * ik;
-
-     % H 행렬 계산
-    OCV_H = interp1(soc_values, ocv_values, SOC_pred, 'linear', 'extrap');
-    OCV_H_before = interp1(soc_values, ocv_values, SOC_est, 'linear', 'extrap');
-    
-    if SOC_pred == SOC_est
-        H_k = [0 -1];
-    else
-        H_k = [(OCV_H - OCV_H_before) / (SOC_pred - SOC_est), -1];
-    end
-
-    % Kalman gain
-    S = H_k * P_predict * H_k' + R;
-    K = P_predict * H_k' / S;
-
-    % Measurement residual
-    y_tilde = Vt_true - Vt_pred;
-
-    % State update
-    X_est = X_pred + K * y_tilde;
-    SOC_est = X_est(1);
-    V1_est = X_est(2);
-
-    % Covariance update
-    P = (P_predict - K * H_k) * P_predict;
-    
-    % Update the estimated terminal voltage
-    Vt_est = interp1(soc_values, ocv_values, SOC_est, 'linear', 'extrap') + V1_est + Config.R0 * ik;
-end
 
