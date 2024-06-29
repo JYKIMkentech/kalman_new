@@ -1,7 +1,7 @@
 clc; clear; close all;
 
 % Load UDDS data
-load('C:\Users\deu04\OneDrive\바탕 화면\wykht8y7tg-1\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\Drive cycles\03-21-17_00.29 25degC_UDDS_Pan18650PF.mat');
+load('C:\Users\USER\Desktop\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\Drive cycles\03-21-17_00.29 25degC_UDDS_Pan18650PF.mat');
 udds_current = meas.Current; % UDDS 전류 데이터
 udds_voltage = meas.Voltage; % UDDS 전압 데이터
 udds_time = meas.Time; % UDDS 시간 데이터
@@ -13,9 +13,9 @@ ocv_values = soc_ocv(:, 2); % ocv
 
 % Configuration parameters
 Config.dt = mean(diff(udds_time)); % 평균 시간 간격
-Config.R0 = 0.001884314;
-Config.R1 = 0.045801322;
-Config.C1 = 4846.080679 ;
+Config.R0 = 0.0266;
+Config.R1 = 0.0449;
+Config.C1 = 55897.71 ;
 Config.cap = 2.90; % nominal capacity [Ah] 
 Config.coulomb_efficient = 1;
 
