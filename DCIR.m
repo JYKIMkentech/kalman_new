@@ -1,7 +1,7 @@
 clc;clear;close all
 
 % 데이터 로드
-data = load('C:\Users\USER\Desktop\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\5 pulse disch\03-11-17_08.47 25degC_5Pulse_HPPC_Pan18650PF.mat');
+data = load('C:\Users\deu04\OneDrive\바탕 화면\wykht8y7tg-1\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\5 pulse disch\03-11-17_08.47 25degC_5Pulse_HPPC_Pan18650PF.mat');
 
 % 시간, 전압, 전류 데이터 추출
 time = data.meas.Time;
@@ -166,11 +166,18 @@ end
 for i = 1:length(step_dis)
    data((step_dis(i))).R001s = data(step_dis(i)).R(1);
    data(step_dis(i)).R1s = data(step_dis(i)).R(end);
+   data(step_dis(i)).R0 =  data((step_dis(i))).R001s;
+   data(step_dis(i)).R1 = data(step_dis(i)).R1s - data((step_dis(i))).R001s;
 end
 
 
 %% 63.2% 값을 이용한 tau 및 C 계산
 
+% 시간 초기화
+for i = 1 : length(data)
+    initialTime = data(i).t(1); % 초기 시간 저장
+    data(i).t = data(i).t - initialTime; % 초기 시간을 빼서 시간 초기화
+end
 
 timeAt632 = zeros(1, length(step_dis));  % Initialize timeAt632 as a matrix
 
@@ -183,7 +190,7 @@ for i = 1:length(step_dis)
     maxVoltage = max(data(step_dis(i)).V);
 
     % 63.2% 값 계산
-    targetVoltage = minVoltage + 0.632 * (maxVoltage - minVoltage);
+    targetVoltage = minVoltage + (1 - 0.632 ) * (maxVoltage - minVoltage);
 
     % 63.2%에 가장 가까운 값의 인덱스 찾기
     [~, idx] = min(abs(data(step_dis(i)).V - targetVoltage));
@@ -202,15 +209,117 @@ for i = 1:length(step_dis)
     title('Voltage - Time Graph');
 end
 
-% a값 구하기
-for i = 1:length(step_dis)
-    data(step_dis(i)).a = [data(step_dis(i)).R001s / (data(step_dis(i)).R1s - data(step_dis(i)).R001s) ] + 1;
-end
-
 % C값 구하기
 for i = 1:length(step_dis)
-    data(step_dis(i)).C = data(step_dis(i)).a / [data(step_dis(i)).R001s * data(step_dis(i)).timeAt632];
+    data(step_dis(i)).C = data(step_dis(i)).timeAt632 / (data(step_dis(i)).R1s - data(step_dis(i)).R001s);
 end
+
+% 구조체 생성
+optimized_params_struct = struct('R0', [], 'R1', [], 'C', []);
+
+m = 0;
+
+for i = 1:length(step_dis)
+        deltaV_exp = data(step_dis(i)).deltaV;
+        time_exp = data(step_dis(i)).t;
+        avgI = data(step_dis(i)).avgI;  % 각 스텝의 평균 전류 가져오기
+
+        % 최적화를 위한 초기 추정값
+        initial_guess = [data(step_dis(i)).R0, data(step_dis(i)).R1, data(step_dis(i)).C];
+
+        % fmincon을 사용하여 최적화 수행
+        options = optimoptions('fmincon', 'Display', 'iter', 'MaxIterations', 100);
+        problem = createOptimProblem('fmincon', 'objective', @(params) cost_function(params, time_exp, deltaV_exp, avgI, m), ...
+            'x0', initial_guess, 'lb', [0, 0, 0], 'ub', [], 'options', options);
+        ms = MultiStart('Display', 'iter');
+
+        [opt_params, ~] = run(ms, problem, 10); % 10 independent runs
+
+        optimized_params_struct(i).R0 = opt_params(1);
+        optimized_params_struct(i).R1 = opt_params(2);
+        optimized_params_struct(i).C = opt_params(3);
+        
+        voltage_model = model_func(time_exp, opt_params(1), opt_params(2), opt_params(3), avgI);
+
+        figure('Position', [0 0 800 600]);
+
+        lw = 2;  % Desired line width
+        msz = 10;  % Marker size
+
+        color1 = [0, 0.4470, 0.7410];  % Blue
+        color2 = [0.8500, 0.3250, 0.0980];  % Orange
+        % Create a subplot with two rows and one column
+        subplot(3, 1, [1 2]); % Larger subplot for data and model results
+    
+        % Plot the data with blue solid line
+        plot(time_exp, deltaV_exp, 'b-', 'LineWidth', lw, 'Color', color1);
+        hold on;
+    
+        % Plot the model results with orange dashed line
+        plot(time_exp, voltage_model, 'r--', 'LineWidth', lw, 'Color', color2);
+    
+        legend('실험 데이터', '모델 결과');
+        xlabel('시간 (sec)');
+        ylabel('전압 (V)');
+        title('실험 데이터와 모델 결과');
+    
+        % Set font size and line width for the axis
+        set(gca, 'FontSize', 16, 'LineWidth', 2);
+    
+        % Create a smaller subplot for the weight function
+        subplot(3, 1, 3); % Smaller subplot for the weight function
+    
+        % Plot the weight function (exp(-0.5 * time)) in green
+        weight_function = exp(-0.5 * time_exp);
+        plot(time_exp, weight_function, 'g-', 'LineWidth', lw, 'Color', [0, 1, 0]);
+    
+        legend('Weight Function');
+        xlabel('시간 (sec)');
+        ylabel('가중치');
+        title('가중치 함수');
+    
+        % Set font size and line width for the axis
+        set(gca, 'FontSize', 16, 'LineWidth', 2);
+    
+        % Adjust subplot spacing manually by changing the position of subplots
+        set(gca, 'Position', [0.13, 0.1, 0.775, 0.25]);
+        set(gcf, 'Position', [0, 0, 800, 800]);
+
+        
+        
+end
+
+function cost = cost_function(params, time, deltaV, I, m)
+    R0 = params(1);
+    R1 = params(2);
+    C = params(3);
+    
+    % 모델 함수를 사용하여 예측 전압 계산
+    voltage_model = model_func(time, R0, R1, C, I);
+    
+    % 오차 계산
+    error = deltaV - voltage_model;
+    
+    % 시간에 따라 가중치 함수 적용
+    % m 값을 사용하여 가중치 함수를 조절
+    time_weights = exp(-m * time); 
+    
+    % 가중 평균 제곱근 오차(RMS 오차) 계산
+    weighted_error = error .* time_weights;
+    cost = sqrt(mean(weighted_error.^2));
+end
+
+function voltage = model_func(time, R0, R1, C, I)
+    voltage = I * (R0 + R1 * (1 - exp(-time / (R1 * C))));
+end
+
+
+
+
+
+
+
+
 
 
 
