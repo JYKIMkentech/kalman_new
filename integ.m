@@ -110,6 +110,7 @@ function [SOC_est, V1_est, Vt_est, P] = soc_estimation(SOC_est, V1_est, Vt_true,
     else
         H_k = [(OCV_H - OCV_H_before) / (SOC_pred - SOC_est), -1];
     end
+    
 
     % Kalman gain
     S = H_k * P_predict * H_k' + R;
@@ -129,4 +130,5 @@ function [SOC_est, V1_est, Vt_est, P] = soc_estimation(SOC_est, V1_est, Vt_true,
     % Update the estimated terminal voltage
     Vt_est = interp1(soc_values, ocv_values, SOC_est, 'linear', 'extrap') + V1_est + Config.R0 * ik;
 end
+
 
