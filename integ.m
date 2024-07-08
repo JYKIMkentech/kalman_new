@@ -13,9 +13,9 @@ ocv_values = soc_ocv(:, 2); % ocv
 
 % Configuration parameters
 Config.dt = mean(diff(udds_time)); % 평균 시간 간격
-Config.R0 = 0.001884314;
-Config.R1 = 0.045801322;
-Config.C1 = 4846.080679 ;
+Config.R0 = 0.0266;
+Config.R1 = 0.0449;
+Config.C1 = 55897.71 ;
 Config.cap = 2.90; % nominal capacity [Ah] 
 Config.coulomb_efficient = 1;
 
@@ -110,6 +110,7 @@ function [SOC_est, V1_est, Vt_est, P] = soc_estimation(SOC_est, V1_est, Vt_true,
     else
         H_k = [(OCV_H - OCV_H_before) / (SOC_pred - SOC_est), -1];
     end
+    
 
     % Kalman gain
     S = H_k * P_predict * H_k' + R;
@@ -129,4 +130,5 @@ function [SOC_est, V1_est, Vt_est, P] = soc_estimation(SOC_est, V1_est, Vt_true,
     % Update the estimated terminal voltage
     Vt_est = interp1(soc_values, ocv_values, SOC_est, 'linear', 'extrap') + V1_est + Config.R0 * ik;
 end
+
 
