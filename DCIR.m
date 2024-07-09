@@ -1,7 +1,8 @@
 clc;clear;close all
 
 % 데이터 로드
-data = load('C:\Users\deu04\OneDrive\바탕 화면\wykht8y7tg-1\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\5 pulse disch\03-11-17_08.47 25degC_5Pulse_HPPC_Pan18650PF.mat');
+%data = load('C:\Users\deu04\OneDrive\바탕 화면\wykht8y7tg-1\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\5 pulse disch\03-11-17_08.47 25degC_5Pulse_HPPC_Pan18650PF.mat');
+data = load('C:\Users\김준연\Desktop\wykht8y7tg-1\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\5 pulse disch\03-11-17_08.47 25degC_5Pulse_HPPC_Pan18650PF.mat');
 
 % 시간, 전압, 전류 데이터 추출
 time = data.meas.Time;
@@ -217,7 +218,7 @@ end
 % 구조체 생성
 optimized_params_struct = struct('R0', [], 'R1', [], 'C', []);
 
-m = 10;
+m = 0.05;
 
 for i = 1:length(step_dis)
         deltaV_exp = data(step_dis(i)).deltaV;
@@ -233,7 +234,7 @@ for i = 1:length(step_dis)
             'x0', initial_guess, 'lb', [0, 0, 0], 'ub', [], 'options', options);
         ms = MultiStart('Display', 'iter');
 
-        [opt_params, ~] = run(ms, problem, 10); % 10 independent runs
+        [opt_params, ~] = run(ms, problem, 2); % 10 independent runs
 
         optimized_params_struct(i).R0 = opt_params(1);
         optimized_params_struct(i).R1 = opt_params(2);
@@ -257,8 +258,12 @@ for i = 1:length(step_dis)
     
         % Plot the model results with orange dashed line
         plot(time_exp, voltage_model, 'r--', 'LineWidth', lw, 'Color', color2);
-    
-        legend('실험 데이터', '모델 결과');
+        
+        % 63.2% 시간에 대한 수직선 추가
+        timeAt632 = data(step_dis(i)).timeAt632;
+        line([timeAt632, timeAt632], [min(deltaV_exp), max(deltaV_exp)], 'Color', 'green', 'LineStyle', '--');
+
+        legend('실험 데이터', '모델 결과', '63.2% 시간');
         xlabel('시간 (sec)');
         ylabel('전압 (V)');
         title('실험 데이터와 모델 결과');
@@ -269,8 +274,8 @@ for i = 1:length(step_dis)
         % Create a smaller subplot for the weight function
         subplot(3, 1, 3); % Smaller subplot for the weight function
     
-        % Plot the weight function (exp(-0.5 * time)) in green
-        weight_function = exp(-0.5 * time_exp);
+        % Plot the weight function 
+        weight_function = exp(-m * time_exp);
         plot(time_exp, weight_function, 'g-', 'LineWidth', lw, 'Color', [0, 1, 0]);
     
         legend('Weight Function');
@@ -282,8 +287,8 @@ for i = 1:length(step_dis)
         set(gca, 'FontSize', 16, 'LineWidth', 2);
     
         % Adjust subplot spacing manually by changing the position of subplots
-        set(gca, 'Position', [0.13, 0.1, 0.775, 0.25]);
-        set(gcf, 'Position', [0, 0, 800, 800]);
+        %set(gca, 'Position', [0.13, 0.1, 0.775, 0.25]);
+        %set(gcf, 'Position', [0, 0, 800, 800]);
 
         
         
