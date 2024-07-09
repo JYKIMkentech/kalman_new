@@ -71,7 +71,7 @@ for i_step = 1:num_step
     end
 end
 
-% Dischrage step 구하기
+% Discharge step 구하기
 step_chg = [];
 step_dis = [];
 
@@ -87,7 +87,7 @@ for i = 1:length(data)
     end
 end
 
-%% R0,R1,C 추출 
+%% R0, R1, C 추출 
 
 % 평균 전류 구하기
 for i = 1:length(data)
@@ -113,64 +113,13 @@ for i = 1 : length(data)
 end
 
 for i = 1:length(step_dis)
-   data((step_dis(i))).R001s = data(step_dis(i)).R(1);
+   data(step_dis(i)).R001s = data(step_dis(i)).R(1);
    data(step_dis(i)).R1s = data(step_dis(i)).R(end);
+   data(step_dis(i)).R0 = data(step_dis(i)).R001s;
+   data(step_dis(i)).R1 = data(step_dis(i)).R1s - data(step_dis(i)).R001s;
 end
 
-
-
-% Fitting code
-
-% Dischrage step 구하기
-step_chg = [];
-step_dis = [];
-
-for i = 1:length(data)
-    % type 필드가 C인지 확인
-    if strcmp(data(i).type, 'C')
-        % C가 맞으면 idx 1 추가
-        step_chg(end+1) = i;
-    % type 필드가 D인지 확인
-    elseif strcmp(data(i).type, 'D')
-        % 맞으면 idx 1 추가
-        step_dis(end+1) = i;
-    end
-end
-
-%% R0,R1,C 추출 
-
-% 평균 전류 구하기
-for i = 1:length(data)
-    data(i).avgI = mean(data(i).I);
-end
-
-% V 변화량 구하기
-for i = 1 : length(data)
-    if i == 1
-       data(i).deltaV = zeros(size(data(i).V));
-    else
-       data(i).deltaV = data(i).V - data(i-1).V(end);
-    end
-end
-
-% Resistance 구하기 
-for i = 1 : length(data)
-    if data(i).avgI == 0
-        data(i).R = zeros(size(data(i).V));
-    else 
-        data(i).R = (data(i).deltaV / data(i).avgI) .* ones(size(data(i).V));
-    end
-end
-
-for i = 1:length(step_dis)
-   data((step_dis(i))).R001s = data(step_dis(i)).R(1);
-   data(step_dis(i)).R1s = data(step_dis(i)).R(end);
-   data(step_dis(i)).R0 =  data((step_dis(i))).R001s;
-   data(step_dis(i)).R1 = data(step_dis(i)).R1s - data((step_dis(i))).R001s;
-end
-
-
-%% 63.2% 값을 이용한 tau 및 C 계산
+%% 지수 함수 피팅을 통한 tau 및 C 계산
 
 % 시간 초기화
 for i = 1 : length(data)
@@ -178,67 +127,64 @@ for i = 1 : length(data)
     data(i).t = data(i).t - initialTime; % 초기 시간을 빼서 시간 초기화
 end
 
-timeAt632 = zeros(1, length(step_dis));  % Initialize timeAt632 as a matrix
-
 for i = 1:length(step_dis)
-    
-    plot(data(step_dis(i)).t, data(step_dis(i)).V);
+    % 시간 및 전압 데이터 추출
+    t = data(step_dis(i)).t;
+    V = data(step_dis(i)).V;
 
-    % 최소값과 최대값 계산
-    minVoltage = min(data(step_dis(i)).V);
-    maxVoltage = max(data(step_dis(i)).V);
+    % 지수 함수 피팅
+    exp_fit = fit(t, V, 'exp1'); % 'exp1'은 a*exp(b*x) 형식의 지수 함수 피팅
+    a = exp_fit.a;
+    b = exp_fit.b;
 
-    % 63.2% 값 계산
-    targetVoltage = minVoltage + (1 - 0.632 ) * (maxVoltage - minVoltage);
+    % 시상수 tau 계산
+    tau = -1/b;
 
-    % 63.2%에 가장 가까운 값의 인덱스 찾기
-    [~, idx] = min(abs(data(step_dis(i)).V - targetVoltage));
+    % data 구조체에 tau 및 C 값 추가
+    data(step_dis(i)).tau = tau;
+    data(step_dis(i)).C = tau / data(step_dis(i)).R1;
 
-    % 해당 시간 찾기
-    timeAt632 = data(step_dis(i)).t(idx);
-    
-    % data(step_dis(i)) 구조체에 timeAt632 필드를 추가하고 값 할당
-    data(step_dis(i)).timeAt632 = timeAt632;
-
-    % 해당 시간에 선 그리기
-    line([timeAt632, timeAt632], [minVoltage, maxVoltage], 'Color', 'red', 'LineStyle', '--');
-
-    xlabel('Time');
-    ylabel('Voltage (V)', 'fontsize', 12);
-    title('Voltage - Time Graph');
+    % 피팅 결과 플롯
+    figure;
+    plot(t, V, 'b-', 'LineWidth', 2); % 원본 데이터
+    hold on;
+    plot(t, exp_fit(t), 'r--', 'LineWidth', 2); % 피팅 데이터
+    xlabel('Time (s)');
+    ylabel('Voltage (V)');
+    title(sprintf('Exponential Fit: tau = %.2f s, SOC = %.2f%%', tau, mean(data(step_dis(i)).SOC) * 100));
+    legend('Original Data', 'Exponential Fit');
 end
 
-% C값 구하기
-for i = 1:length(step_dis)
-    data(step_dis(i)).C = data(step_dis(i)).timeAt632 / (data(step_dis(i)).R1s - data(step_dis(i)).R001s);
-end
-
-% 구조체 생성
-optimized_params_struct = struct('R0', [], 'R1', [], 'C', []);
-
-m = 3;
+% 최적화된 매개변수 구조체 생성
+optimized_params_struct = struct('R0', [], 'R1', [], 'C', [], 'SOC', []);
 
 for i = 1:length(step_dis)
-        deltaV_exp = data(step_dis(i)).deltaV;
-        time_exp = data(step_dis(i)).t;
-        avgI = data(step_dis(i)).avgI;  % 각 스텝의 평균 전류 가져오기
+    deltaV_exp = data(step_dis(i)).deltaV;
+    time_exp = data(step_dis(i)).t;
+    avgI = data(step_dis(i)).avgI;  % 각 스텝의 평균 전류 가져오기
+    m = 1 / data(step_dis(i)).tau; % tau의 역수를 m으로 설정
 
-        % 최적화를 위한 초기 추정값
-        initial_guess = [data(step_dis(i)).R0, data(step_dis(i)).R1, data(step_dis(i)).C];
+    % 스텝의 시간 길이 확인
+    step_duration = time_exp(end) - time_exp(1);
+
+    if step_duration >= 5 % 스텝의 시간이 5초 이상인 경우에만 저장
+        % 최적화를 위한 초기 추정값 (R0를 제외하고 R1과 C만 포함)
+        initial_guess = [data(step_dis(i)).R1, data(step_dis(i)).C];
 
         % fmincon을 사용하여 최적화 수행
         options = optimoptions('fmincon', 'Display', 'iter', 'MaxIterations', 100);
-        problem = createOptimProblem('fmincon', 'objective', @(params) cost_function(params, time_exp, deltaV_exp, avgI, m), ...
-            'x0', initial_guess, 'lb', [0, 0, 0], 'ub', [], 'options', options);
+        problem = createOptimProblem('fmincon', 'objective', @(params) cost_function(params, time_exp, deltaV_exp, avgI, m, data(step_dis(i)).R0), ...
+            'x0', initial_guess, 'lb', [0, 0], 'ub', [], 'options', options);
         ms = MultiStart('Display', 'iter');
 
         [opt_params, ~] = run(ms, problem, 10); % 10 independent runs
 
-        optimized_params_struct(i).R0 = opt_params(1);
-        optimized_params_struct(i).R1 = opt_params(2);
-        optimized_params_struct(i).C = opt_params(3);
+        optimized_params_struct(i).R0 = data(step_dis(i)).R0; % R0 고정된 값 사용
+        optimized_params_struct(i).R1 = opt_params(1);
+        optimized_params_struct(i).C = opt_params(2);
+        optimized_params_struct(i).SOC = mean(data(step_dis(i)).SOC); % 평균 SOC 값을 저장
         
-        voltage_model = model_func(time_exp, opt_params(1), opt_params(2), opt_params(3), avgI);
+        voltage_model = model_func(time_exp, optimized_params_struct(i).R0, opt_params(1), opt_params(2), avgI);
 
         figure('Position', [0 0 800 600]);
 
@@ -249,53 +195,54 @@ for i = 1:length(step_dis)
         color2 = [0.8500, 0.3250, 0.0980];  % Orange
         % Create a subplot with two rows and one column
         subplot(3, 1, [1 2]); % Larger subplot for data and model results
-    
+
         % Plot the data with blue solid line
         plot(time_exp, deltaV_exp, 'b-', 'LineWidth', lw, 'Color', color1);
         hold on;
-    
+
         % Plot the model results with orange dashed line
         plot(time_exp, voltage_model, 'r--', 'LineWidth', lw, 'Color', color2);
         
         % 63.2% 시간에 대한 수직선 추가
-        timeAt632 = data(step_dis(i)).timeAt632;
-        line([timeAt632, timeAt632], [min(deltaV_exp), max(deltaV_exp)], 'Color', 'green', 'LineStyle', '--');
+        timeAt632_plot = data(step_dis(i)).timeAt632;
+        line([timeAt632_plot, timeAt632_plot], [min(deltaV_exp), max(deltaV_exp)], 'Color', 'green', 'LineStyle', '--');
+
+        % SOC 값 표시
+        soc_text = sprintf('SOC: %.2f%%', optimized_params_struct(i).SOC * 100);
+        text(time_exp(1) + (time_exp(end) - time_exp(1)) * 0.05, max(deltaV_exp) * 0.9, soc_text, 'FontSize', 12, 'Color', 'black', 'FontWeight', 'bold');
 
         legend('실험 데이터', '모델 결과', '63.2% 시간');
         xlabel('시간 (sec)');
         ylabel('전압 (V)');
         title('실험 데이터와 모델 결과');
-    
+
         % Set font size and line width for the axis
         set(gca, 'FontSize', 16, 'LineWidth', 2);
-    
+
         % Create a smaller subplot for the weight function
         subplot(3, 1, 3); % Smaller subplot for the weight function
-    
+
         % Plot the weight function 
         weight_function = exp(-m * time_exp);
         plot(time_exp, weight_function, 'g-', 'LineWidth', lw, 'Color', [0, 1, 0]);
-    
+
         legend('Weight Function');
         xlabel('시간 (sec)');
         ylabel('가중치');
         title('가중치 함수');
-    
+
         % Set font size and line width for the axis
         set(gca, 'FontSize', 16, 'LineWidth', 2);
-    
+
         % Adjust subplot spacing manually by changing the position of subplots
         set(gca, 'Position', [0.13, 0.1, 0.775, 0.25]);
         set(gcf, 'Position', [0, 0, 800, 800]);
-
-        
-        
+    end
 end
 
-function cost = cost_function(params, time, deltaV, I, m)
-    R0 = params(1);
-    R1 = params(2);
-    C = params(3);
+function cost = cost_function(params, time, deltaV, I, m, R0)
+    R1 = params(1);
+    C = params(2);
     
     % 모델 함수를 사용하여 예측 전압 계산
     voltage_model = model_func(time, R0, R1, C, I);
