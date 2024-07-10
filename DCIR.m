@@ -63,12 +63,12 @@ for i_step = 1:num_step
     data(i_step).steptime = data1.t(range);
     data(i_step).T = zeros(size(range)); % 온도 데이터가 없으므로 0으로 설정
     
-    % SOC 계산
-    if i_step == 1
-        data(i_step).SOC = initial_SOC + cumtrapz(data(i_step).t, data(i_step).I) / (capacity_Ah * 3600);
-    else
-        data(i_step).SOC = data(i_step-1).SOC(end) + cumtrapz(data(i_step).t, data(i_step).I) / (capacity_Ah * 3600);
-    end
+%     % SOC 계산
+%     if i_step == 1
+%         data(i_step).SOC = initial_SOC + cumtrapz(data(i_step).t, data(i_step).I) / (capacity_Ah * 3600);
+%     else
+%         data(i_step).SOC = data(i_step-1).SOC(end) + cumtrapz(data(i_step).t, data(i_step).I) / (capacity_Ah * 3600);
+%     end
 end
 
 % Discharge step 구하기
@@ -86,6 +86,7 @@ for i = 1:length(data)
         step_dis(end+1) = i;
     end
 end
+
 
 %% R0, R1, C 추출 
 
@@ -137,6 +138,8 @@ for i = 1:length(step_dis)
     end
 end
 
+
+
 %% 63.2% 값을 이용한 tau 및 C 계산
 
 % % 시간 초기화
@@ -179,35 +182,66 @@ for i = 1:length(step_dis)
     data(step_dis(i)).C = data(step_dis(i)).timeAt632 / (data(step_dis(i)).R1s - data(step_dis(i)).R001s);
 end
 
+% SOC 값을 정의된 패턴에 따라 생성
+soc_values = [1, 0.95, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.25, 0.2, 0.15, 0.1, 0.05];
+steps_per_level = 5;
+
+% SOC 배열 초기화
+SOC = zeros(length(step_dis), 1);
+current_index = 1;
+
+for i = 1:length(soc_values)
+    end_index = min(current_index + steps_per_level - 1, length(step_dis));
+    SOC(current_index:end_index) = soc_values(i);
+    current_index = end_index + 1;
+end
+
+% step_dis 배열을 사용하여 데이터에 SOC 값 할당
+for i = 1:length(step_dis)
+    data(step_dis(i)).SOC = SOC(i);
+end
+
+data(130).SOC = 0.05;
+
 % 구조체 생성
-optimized_params_struct = struct('R0', [], 'R1', [], 'C', [], 'SOC', []);
+optimized_params_struct = struct('R0', [], 'R1', [], 'C', [], 'SOC', [], 'avgI', []);
+
+% 초기 추정값 개수 설정
+num_start_points = 10; % 원하는 시작점의 개수 설정
 
 for i = 1:length(step_dis)
     deltaV_exp = data(step_dis(i)).deltaV;
     time_exp = data(step_dis(i)).t;
     avgI = data(step_dis(i)).avgI;  % 각 스텝의 평균 전류 가져오기
-    m = 0.05 / data(step_dis(i)).timeAt632; % timeAt632의 역수를 m으로 설정
+    m = 2 / data(step_dis(i)).timeAt632; % timeAt632의 역수를 m으로 설정
 
     % 스텝의 시간 길이 확인
     step_duration = time_exp(end) - time_exp(1);
 
-    if step_duration >= 5 % 스텝의 시간이 5초 이상인 경우에만 저장
-        % 최적화를 위한 초기 추정값 (R0를 제외하고 R1과 C만 포함)
-        initial_guess = [data(step_dis(i)).R1, data(step_dis(i)).C];
+    if step_duration >= 0 % 스텝의 시간이 5초 이상인 경우에만 저장
+        % 최적화를 위한 여러 초기 추정값 생성
+        initial_guesses = repmat([data(step_dis(i)).R1, data(step_dis(i)).C], num_start_points, 1);
+
+        % 각 시작점에 대해 약간의 변동을 추가하여 다양한 시작점을 생성
+        for k = 1:num_start_points
+            initial_guesses(k, 1) = initial_guesses(k, 1) * (1 + 0.1 * (rand - 0.5)); % R1 변동
+            initial_guesses(k, 2) = initial_guesses(k, 2) * (1 + 0.1 * (rand - 0.5)); % C 변동
+        end
 
         % fmincon을 사용하여 최적화 수행
         options = optimoptions('fmincon', 'Display', 'iter', 'MaxIterations', 100);
         problem = createOptimProblem('fmincon', 'objective', @(params) cost_function(params, time_exp, deltaV_exp, avgI, m, data(step_dis(i)).R0), ...
-            'x0', initial_guess, 'lb', [0, 0], 'ub', [], 'options', options);
+            'x0', initial_guesses, 'lb', [0, 0], 'ub', [], 'options', options);
         ms = MultiStart('Display', 'iter');
 
-        [opt_params, ~] = run(ms, problem, 10); % 10 independent runs
+        [opt_params, ~] = run(ms, problem, num_start_points); % 여러 시작점으로 실행
 
         optimized_params_struct(i).R0 = data(step_dis(i)).R0; % R0 고정된 값 사용
         optimized_params_struct(i).R1 = opt_params(1);
         optimized_params_struct(i).C = opt_params(2);
         optimized_params_struct(i).SOC = mean(data(step_dis(i)).SOC); % 평균 SOC 값을 저장
-        
+        optimized_params_struct(i).Crate = avgI/data(step_dis(2)).avgI; % 평균 전류 저장
+
         voltage_model = model_func(time_exp, optimized_params_struct(i).R0, opt_params(1), opt_params(2), avgI);
 
         figure('Position', [0 0 800 600]);
@@ -233,7 +267,8 @@ for i = 1:length(step_dis)
 
         % SOC 값 표시
         soc_text = sprintf('SOC: %.2f%%', optimized_params_struct(i).SOC * 100);
-        text(time_exp(1) + (time_exp(end) - time_exp(1)) * 0.05, max(deltaV_exp) * 0.9, soc_text, 'FontSize', 12, 'Color', 'black', 'FontWeight', 'bold');
+        crate_text = sprintf('C-rate: %.2f', optimized_params_struct(i).Crate);
+        text(time_exp(1) + (time_exp(end) - time_exp(1)) * 0.05, max(deltaV_exp) * 0.9, {soc_text, crate_text}, 'FontSize', 12, 'Color', 'black', 'FontWeight', 'bold');
 
         legend('실험 데이터', '모델 결과', '63.2% 시간');
         xlabel('시간 (sec)');
@@ -263,6 +298,110 @@ for i = 1:length(step_dis)
         set(gcf, 'Position', [0, 0, 800, 800]);
     end
 end
+
+
+%% R0 그래프 그리기
+
+
+% R0, SOC, Crate 값을 추출
+R0_values = [optimized_params_struct.R0];
+R1_values = [optimized_params_struct.R1];
+C_values = [optimized_params_struct.C];
+
+
+SOC_values = [optimized_params_struct.SOC];
+Crate_values = [optimized_params_struct.Crate];
+
+% 고유한 SOC 및 Crate 값을 가져옴
+unique_SOC = unique(SOC_values);
+unique_Crate = unique(Crate_values);
+
+% 원래 데이터로부터 그리드 생성
+[X, Y] = meshgrid(unique_SOC, unique_Crate);
+
+% 원래 데이터를 보간하여 더 많은 데이터 포인트 생성
+[Xq, Yq] = meshgrid(linspace(min(unique_SOC), max(unique_SOC), 100), linspace(min(unique_Crate), max(unique_Crate), 100));
+R0_matrix = griddata(SOC_values, Crate_values, R0_values, Xq, Yq, 'cubic');
+
+% 3차원 곡면 그래프 그리기
+figure;
+surf(Xq, Yq, R0_matrix);
+xlabel('SOC');
+ylabel('Crate');
+zlabel('R0');
+title('R0 vs SOC and Crate');
+shading interp; % 색상 보간으로 부드럽게 표현
+grid on;
+
+% Z축 범위 조정
+zlim([0, 0.05]); % Z축을 0에서 1로 설정
+
+% 2차원 등고선 그래프 그리기
+figure;
+contourf(Xq, Yq, R0_matrix, 20); % 등고선 개수를 20으로 설정
+xlabel('SOC');
+ylabel('Crate');
+title('Contour of R0 vs SOC and Crate');
+colorbar; % 색상 바 추가
+grid on;
+
+% R1 vs SOC and Crate 3D Surface Plot
+[Xq_R1, Yq_R1] = meshgrid(linspace(min(unique_SOC), max(unique_SOC), 100), linspace(min(unique_Crate), max(unique_Crate), 100));
+R1_matrix = griddata(SOC_values, Crate_values, R1_values, Xq_R1, Yq_R1, 'cubic');
+
+figure;
+surf(Xq_R1, Yq_R1, R1_matrix);
+xlabel('SOC');
+ylabel('Crate');
+zlabel('R1');
+title('R1 vs SOC and Crate');
+shading interp; % 색상 보간으로 부드럽게 표현
+grid on;
+
+% 2D Contour Plot for R1
+figure;
+contourf(Xq_R1, Yq_R1, R1_matrix, 20); % 등고선 개수를 20으로 설정
+xlabel('SOC');
+ylabel('Crate');
+title('Contour of R1 vs SOC and Crate');
+colorbar; % 색상 바 추가
+grid on;
+
+% C vs SOC and Crate 3D Surface Plot
+[Xq_C, Yq_C] = meshgrid(linspace(min(unique_SOC), max(unique_SOC), 100), linspace(min(unique_Crate), max(unique_Crate), 100));
+C_matrix = griddata(SOC_values, Crate_values, C_values, Xq_C, Yq_C, 'cubic');
+
+figure;
+surf(Xq_C, Yq_C, C_matrix);
+xlabel('SOC');
+ylabel('Crate');
+zlabel('C');
+title('C vs SOC and Crate');
+shading interp; % 색상 보간으로 부드럽게 표현
+grid on;
+
+% 2D Contour Plot for C
+figure;
+contourf(Xq_C, Yq_C, C_matrix, 20); % 등고선 개수를 20으로 설정
+xlabel('SOC');
+ylabel('Crate');
+title('Contour of C vs SOC and Crate');
+colorbar; % 색상 바 추가
+grid on;
+
+
+%% R0, R1, C 평균값 계산
+R0_mean = mean([optimized_params_struct.R0]);
+R1_mean = mean([optimized_params_struct.R1]);
+C_mean = mean([optimized_params_struct.C]);
+
+% 결과 출력
+fprintf('R0의 평균 값: %.6f\n', R0_mean);
+fprintf('R1의 평균 값: %.6f\n', R1_mean);
+fprintf('C의 평균 값: %.6f\n', C_mean);
+
+
+%% 함수
 
 function cost = cost_function(params, time, deltaV, I, m, R0)
     R1 = params(1);
