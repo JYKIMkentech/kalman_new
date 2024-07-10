@@ -15,7 +15,7 @@ ocv_values = soc_ocv(:, 2); % ocv
 Config.dt = mean(diff(udds_time)); % 평균 시간 간격
 Config.R0 = 0.0266;
 Config.R1 = 0.0449;
-Config.C1 = 55897.71 ;
+Config.C1 = 100 ;
 Config.cap = 2.90; % nominal capacity [Ah] 
 Config.coulomb_efficient = 1;
 
