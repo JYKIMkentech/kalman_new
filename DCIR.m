@@ -4,7 +4,7 @@ clc; clear; close all;
 %data = load('C:\Users\deu04\OneDrive\바탕 화면\wykht8y7tg-1\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\5 pulse disch\03-11-17_08.47 25degC_5Pulse_HPPC_Pan18650PF.mat');
 data = load('C:\Users\김준연\Desktop\wykht8y7tg-1\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\5 pulse disch\03-11-17_08.47 25degC_5Pulse_HPPC_Pan18650PF.mat');
 % 시간, 전압, 전류 데이터 추출
-% 시간, 전압, 전류 데이터 추출
+
 time = data.meas.Time;
 voltage = data.meas.Voltage;
 current = data.meas.Current;
@@ -139,6 +139,8 @@ for i = 1:length(step_dis)
     end
 end
 
+
+
 %% 63.2% 값을 이용한 tau 및 C 계산
 
 % % 시간 초기화
@@ -200,7 +202,7 @@ for i = 1:length(step_dis)
     data(step_dis(i)).SOC = SOC(i);
 end
 
-data(130).SOC = 0.5;
+data(130).SOC = 0.05;
 
 % 구조체 생성
 optimized_params_struct = struct('R0', [], 'R1', [], 'C', [], 'SOC', [], 'avgI', []);
@@ -212,16 +214,16 @@ for i = 1:length(step_dis)
     deltaV_exp = data(step_dis(i)).deltaV;
     time_exp = data(step_dis(i)).t;
     avgI = data(step_dis(i)).avgI;  % 각 스텝의 평균 전류 가져오기
-    m = 1.5 / data(step_dis(i)).timeAt632; % timeAt632의 역수를 m으로 설정
+    m = 2 / data(step_dis(i)).timeAt632; % timeAt632의 역수를 m으로 설정
 
     % 스텝의 시간 길이 확인
     step_duration = time_exp(end) - time_exp(1);
 
-    if step_duration >= 5 % 스텝의 시간이 5초 이상인 경우에만 저장
+    if step_duration >= 0 % 스텝의 시간이 5초 이상인 경우에만 저장
         % 최적화를 위한 여러 초기 추정값 생성
         initial_guesses = repmat([data(step_dis(i)).R1, data(step_dis(i)).C], num_start_points, 1);
 
-        % multistart
+        % 각 시작점에 대해 약간의 변동을 추가하여 다양한 시작점을 생성
         for k = 1:num_start_points
             initial_guesses(k, 1) = initial_guesses(k, 1) * (1 + 0.1 * (rand - 0.5)); % R1 변동
             initial_guesses(k, 2) = initial_guesses(k, 2) * (1 + 0.1 * (rand - 0.5)); % C 변동
@@ -266,7 +268,8 @@ for i = 1:length(step_dis)
 
         % SOC 값 표시
         soc_text = sprintf('SOC: %.2f%%', optimized_params_struct(i).SOC * 100);
-        text(time_exp(1) + (time_exp(end) - time_exp(1)) * 0.05, max(deltaV_exp) * 0.9, soc_text, 'FontSize', 12, 'Color', 'black', 'FontWeight', 'bold');
+        crate_text = sprintf('C-rate: %.2f', optimized_params_struct(i).Crate);
+        text(time_exp(1) + (time_exp(end) - time_exp(1)) * 0.05, max(deltaV_exp) * 0.9, {soc_text, crate_text}, 'FontSize', 12, 'Color', 'black', 'FontWeight', 'bold');
 
         legend('실험 데이터', '모델 결과', '63.2% 시간');
         xlabel('시간 (sec)');
@@ -303,6 +306,9 @@ end
 
 % R0, SOC, Crate 값을 추출
 R0_values = [optimized_params_struct.R0];
+R1_values = [optimized_params_struct.R1];
+C_values = [optimized_params_struct.C];
+
 SOC_values = [optimized_params_struct.SOC];
 Crate_values = [optimized_params_struct.Crate];
 
@@ -324,21 +330,75 @@ xlabel('SOC');
 ylabel('Crate');
 zlabel('R0');
 title('R0 vs SOC and Crate');
-shading interp; 
+shading interp; % 색상 보간으로 부드럽게 표현
 grid on;
 
 % Z축 범위 조정
-%zlim([0, 1]); 
+zlim([0, 0.05]); % Z축을 0에서 1로 설정
 
 % 2차원 등고선 그래프 그리기
 figure;
-contourf(Xq, Yq, R0_matrix, 20);
+contourf(Xq, Yq, R0_matrix, 20); % 등고선 개수를 20으로 설정
 xlabel('SOC');
 ylabel('Crate');
 title('Contour of R0 vs SOC and Crate');
-colorbar; 
+colorbar; % 색상 바 추가
 grid on;
 
+% R1 vs SOC and Crate 3D Surface Plot
+[Xq_R1, Yq_R1] = meshgrid(linspace(min(unique_SOC), max(unique_SOC), 100), linspace(min(unique_Crate), max(unique_Crate), 100));
+R1_matrix = griddata(SOC_values, Crate_values, R1_values, Xq_R1, Yq_R1, 'cubic');
+
+figure;
+surf(Xq_R1, Yq_R1, R1_matrix);
+xlabel('SOC');
+ylabel('Crate');
+zlabel('R1');
+title('R1 vs SOC and Crate');
+shading interp; % 색상 보간으로 부드럽게 표현
+grid on;
+
+% 2D Contour Plot for R1
+figure;
+contourf(Xq_R1, Yq_R1, R1_matrix, 20); % 등고선 개수를 20으로 설정
+xlabel('SOC');
+ylabel('Crate');
+title('Contour of R1 vs SOC and Crate');
+colorbar; % 색상 바 추가
+grid on;
+
+% C vs SOC and Crate 3D Surface Plot
+[Xq_C, Yq_C] = meshgrid(linspace(min(unique_SOC), max(unique_SOC), 100), linspace(min(unique_Crate), max(unique_Crate), 100));
+C_matrix = griddata(SOC_values, Crate_values, C_values, Xq_C, Yq_C, 'cubic');
+
+figure;
+surf(Xq_C, Yq_C, C_matrix);
+xlabel('SOC');
+ylabel('Crate');
+zlabel('C');
+title('C vs SOC and Crate');
+shading interp; % 색상 보간으로 부드럽게 표현
+grid on;
+
+% 2D Contour Plot for C
+figure;
+contourf(Xq_C, Yq_C, C_matrix, 20); % 등고선 개수를 20으로 설정
+xlabel('SOC');
+ylabel('Crate');
+title('Contour of C vs SOC and Crate');
+colorbar; % 색상 바 추가
+grid on;
+
+
+%% R0, R1, C 평균값 계산
+R0_mean = mean([optimized_params_struct.R0]);
+R1_mean = mean([optimized_params_struct.R1]);
+C_mean = mean([optimized_params_struct.C]);
+
+% 결과 출력
+fprintf('R0의 평균 값: %.6f\n', R0_mean);
+fprintf('R1의 평균 값: %.6f\n', R1_mean);
+fprintf('C의 평균 값: %.6f\n', C_mean);
 
 
 %% 함수
