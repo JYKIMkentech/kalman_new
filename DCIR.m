@@ -1,3 +1,4 @@
+
 clc; clear; close all;
 
 % 데이터 로드
@@ -8,7 +9,6 @@ time = data.meas.Time;
 voltage = data.meas.Voltage;
 current = data.meas.Current;
 
-% 전류 상태 파싱 (C, D, R)
 data1.I = current;
 data1.V = voltage;
 data1.t = time;
@@ -62,13 +62,6 @@ for i_step = 1:num_step
     data(i_step).type = data1.type(range(1));
     data(i_step).steptime = data1.t(range);
     data(i_step).T = zeros(size(range)); % 온도 데이터가 없으므로 0으로 설정
-    
-%     % SOC 계산
-%     if i_step == 1
-%         data(i_step).SOC = initial_SOC + cumtrapz(data(i_step).t, data(i_step).I) / (capacity_Ah * 3600);
-%     else
-%         data(i_step).SOC = data(i_step-1).SOC(end) + cumtrapz(data(i_step).t, data(i_step).I) / (capacity_Ah * 3600);
-%     end
 end
 
 % Discharge step 구하기
@@ -86,7 +79,6 @@ for i = 1:length(data)
         step_dis(end+1) = i;
     end
 end
-
 
 %% R0, R1, C 추출 
 
@@ -138,15 +130,7 @@ for i = 1:length(step_dis)
     end
 end
 
-
-
 %% 63.2% 값을 이용한 tau 및 C 계산
-
-% % 시간 초기화
-% for i = 1 : length(data)
-%     initialTime = data(i).t(1); % 초기 시간 저장
-%     data(i).t = data(i).t - initialTime; % 초기 시간을 빼서 시간 초기화
-% end
 
 timeAt632 = zeros(1, length(step_dis));  % Initialize timeAt632 as a matrix
 
@@ -219,14 +203,8 @@ for i = 1:length(step_dis)
     step_duration = time_exp(end) - time_exp(1);
 
     if step_duration >= 0 % 스텝의 시간이 5초 이상인 경우에만 저장
-        % 최적화를 위한 여러 초기 추정값 생성
+        % 최적화를 위한 초기 추정값 생성
         initial_guesses = repmat([data(step_dis(i)).R1, data(step_dis(i)).C], num_start_points, 1);
-
-        % 각 시작점에 대해 약간의 변동을 추가하여 다양한 시작점을 생성
-        for k = 1:num_start_points
-            initial_guesses(k, 1) = initial_guesses(k, 1) * (1 + 0.1 * (rand - 0.5)); % R1 변동
-            initial_guesses(k, 2) = initial_guesses(k, 2) * (1 + 0.1 * (rand - 0.5)); % C 변동
-        end
 
         % fmincon을 사용하여 최적화 수행
         options = optimoptions('fmincon', 'Display', 'iter', 'MaxIterations', 100);
@@ -299,53 +277,57 @@ for i = 1:length(step_dis)
     end
 end
 
+%% R1 값의 이상치 제거
 
-%% R0 그래프 그리기
-
-
-% R0, SOC, Crate 값을 추출
-R0_values = [optimized_params_struct.R0];
+% R1 값의 평균과 표준 편차 계산
 R1_values = [optimized_params_struct.R1];
-C_values = [optimized_params_struct.C];
+R1_mean = mean(R1_values);
+R1_std = std(R1_values);
 
+% 이상치를 감지하기 위한 임계값 설정 (예: 평균 ± 3 표준편차)
+threshold = 3;
+outliers = abs(R1_values - R1_mean) > threshold * R1_std;
 
-SOC_values = [optimized_params_struct.SOC];
-Crate_values = [optimized_params_struct.Crate];
+% 이상치가 아닌 데이터만 선택
+optimized_params_filtered = optimized_params_struct(~outliers);
 
-% 고유한 SOC 및 Crate 값을 가져옴
+% 이상치가 제거된 데이터를 저장
+save('optimized_params_filtered.mat', 'optimized_params_filtered');
+
+% 이상치가 제거된 데이터로 그래프 그리기
+R0_values = [optimized_params_filtered.R0];
+R1_values = [optimized_params_filtered.R1];
+C_values = [optimized_params_filtered.C];
+
+SOC_values = [optimized_params_filtered.SOC];
+Crate_values = [optimized_params_filtered.Crate];
+
 unique_SOC = unique(SOC_values);
 unique_Crate = unique(Crate_values);
 
-% 원래 데이터로부터 그리드 생성
 [X, Y] = meshgrid(unique_SOC, unique_Crate);
-
-% 원래 데이터를 보간하여 더 많은 데이터 포인트 생성
 [Xq, Yq] = meshgrid(linspace(min(unique_SOC), max(unique_SOC), 100), linspace(min(unique_Crate), max(unique_Crate), 100));
 R0_matrix = griddata(SOC_values, Crate_values, R0_values, Xq, Yq, 'cubic');
 
-% 3차원 곡면 그래프 그리기
 figure;
 surf(Xq, Yq, R0_matrix);
 xlabel('SOC');
 ylabel('Crate');
 zlabel('R0');
 title('R0 vs SOC and Crate');
-shading interp; % 색상 보간으로 부드럽게 표현
+shading interp;
 grid on;
 
-% Z축 범위 조정
-zlim([0, 0.05]); % Z축을 0에서 1로 설정
+zlim([0, 0.05]);
 
-% 2차원 등고선 그래프 그리기
 figure;
-contourf(Xq, Yq, R0_matrix, 20); % 등고선 개수를 20으로 설정
+contourf(Xq, Yq, R0_matrix, 20);
 xlabel('SOC');
 ylabel('Crate');
 title('Contour of R0 vs SOC and Crate');
-colorbar; % 색상 바 추가
+colorbar;
 grid on;
 
-% R1 vs SOC and Crate 3D Surface Plot
 [Xq_R1, Yq_R1] = meshgrid(linspace(min(unique_SOC), max(unique_SOC), 100), linspace(min(unique_Crate), max(unique_Crate), 100));
 R1_matrix = griddata(SOC_values, Crate_values, R1_values, Xq_R1, Yq_R1, 'cubic');
 
@@ -355,19 +337,17 @@ xlabel('SOC');
 ylabel('Crate');
 zlabel('R1');
 title('R1 vs SOC and Crate');
-shading interp; % 색상 보간으로 부드럽게 표현
+shading interp;
 grid on;
 
-% 2D Contour Plot for R1
 figure;
-contourf(Xq_R1, Yq_R1, R1_matrix, 20); % 등고선 개수를 20으로 설정
+contourf(Xq_R1, Yq_R1, R1_matrix, 20);
 xlabel('SOC');
 ylabel('Crate');
 title('Contour of R1 vs SOC and Crate');
-colorbar; % 색상 바 추가
+colorbar;
 grid on;
 
-% C vs SOC and Crate 3D Surface Plot
 [Xq_C, Yq_C] = meshgrid(linspace(min(unique_SOC), max(unique_SOC), 100), linspace(min(unique_Crate), max(unique_Crate), 100));
 C_matrix = griddata(SOC_values, Crate_values, C_values, Xq_C, Yq_C, 'cubic');
 
@@ -377,29 +357,26 @@ xlabel('SOC');
 ylabel('Crate');
 zlabel('C');
 title('C vs SOC and Crate');
-shading interp; % 색상 보간으로 부드럽게 표현
+shading interp;
 grid on;
 
-% 2D Contour Plot for C
 figure;
-contourf(Xq_C, Yq_C, C_matrix, 20); % 등고선 개수를 20으로 설정
+contourf(Xq_C, Yq_C, C_matrix, 20);
 xlabel('SOC');
 ylabel('Crate');
 title('Contour of C vs SOC and Crate');
-colorbar; % 색상 바 추가
+colorbar;
 grid on;
 
-
-%% R0, R1, C 평균값 계산
-R0_mean = mean([optimized_params_struct.R0]);
-R1_mean = mean([optimized_params_struct.R1]);
-C_mean = mean([optimized_params_struct.C]);
+% R0, R1, C 평균값 계산 (이상치 제거 후)
+R0_mean_filtered = mean([optimized_params_filtered.R0]);
+R1_mean_filtered = mean([optimized_params_filtered.R1]);
+C_mean_filtered = mean([optimized_params_filtered.C]);
 
 % 결과 출력
-fprintf('R0의 평균 값: %.6f\n', R0_mean);
-fprintf('R1의 평균 값: %.6f\n', R1_mean);
-fprintf('C의 평균 값: %.6f\n', C_mean);
-
+fprintf('R0의 평균 값 (이상치 제거 후): %.6f\n', R0_mean_filtered);
+fprintf('R1의 평균 값 (이상치 제거 후): %.6f\n', R1_mean_filtered);
+fprintf('C의 평균 값 (이상치 제거 후): %.6f\n', C_mean_filtered);
 
 %% 함수
 
@@ -425,5 +402,7 @@ end
 function voltage = model_func(time, R0, R1, C, I)
     voltage = I * (R0 + R1 * (1 - exp(-time / (R1 * C))));
 end
+
+
 
 

@@ -1,5 +1,8 @@
 clc; clear; close all;
 
+% Load optimized parameters
+load('optimized_params_filtered.mat', 'optimized_params_filtered');
+
 % Load UDDS data
 load('C:\Users\deu04\OneDrive\바탕 화면\wykht8y7tg-1\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\Drive cycles\03-21-17_00.29 25degC_UDDS_Pan18650PF.mat');
 udds_current = meas.Current; % UDDS 전류 데이터
@@ -13,9 +16,6 @@ ocv_values = soc_ocv(:, 2); % ocv
 
 % Configuration parameters
 Config.dt = mean(diff(udds_time)); % 평균 시간 간격
-Config.R0 = 0.025426;
-Config.R1 = 0.0147;
-Config.C1 = 45.474645 ;
 Config.cap = 2.90; % nominal capacity [Ah] 
 Config.coulomb_efficient = 1;
 
@@ -55,11 +55,20 @@ for k = 2:length(udds_current)
     delta_t = Config.dt; % dt 써도 되는데, 정확한 값을 위하여... (비교해보니까 거의 비슷하긴 함) 
     true_SOC(k) = true_SOC(k-1) + (udds_current(k) * delta_t) / (Config.cap * 3600); % 실제 soc = 전 soc + i * dt/q_total (sampling 시간 동안 흐르는 전류)
 
+    % 최적화된 매개변수에서 SOC에 따른 R0, R1, C 값 업데이트
+    R0 = interp1([optimized_params_filtered.SOC], [optimized_params_filtered.R0], SOC_est(k-1), 'linear', 'extrap');
+    R1 = interp1([optimized_params_filtered.SOC], [optimized_params_filtered.R1], SOC_est(k-1), 'linear', 'extrap');
+    C1 = interp1([optimized_params_filtered.SOC], [optimized_params_filtered.C], SOC_est(k-1), 'linear', 'extrap');
+    
+    Config.R0 = R0;
+    Config.R1 = R1;
+    Config.C1 = C1;
+
     % SOC estimation using EKF
     [SOC_est(k), V1_est(k), Vt_est(k), P] = soc_estimation(SOC_est(k-1), V1_est(k-1), udds_voltage(k), udds_current(k), Config, P, unique_soc_values, unique_ocv_values); % 추정 코드
 end
 
-% Plot SOCrm
+% Plot SOC
 figure;
 plot(udds_time, true_SOC, 'b', 'LineWidth', 1.5); hold on;
 plot(udds_time, SOC_est, 'r--', 'LineWidth', 1.5);
