@@ -37,7 +37,8 @@ unique_soc_values = soc_values(unique_idx);
 
 % Interpolate SOC for the first UDDS voltage value
 initial_voltage = udds_voltage(1);
-initial_soc = interp1(unique_ocv_values, unique_soc_values, initial_voltage, 'linear', 'extrap');
+%initial_soc = interp1(unique_ocv_values, unique_soc_values, initial_voltage, 'linear', 'extrap');
+initial_soc = 0.95;
 
 fprintf('Initial voltage: %.2f V corresponds to SOC: %.2f%%\n', initial_voltage, initial_soc * 100);
 
@@ -147,7 +148,7 @@ grid on;
 function [SOC_est, V1_est, Vt_est, P, residual] = soc_estimation(SOC_est, V1_est, Vt_true, ik, Config, P, soc_values, ocv_values)
     Q = [1e-5 0; 
          0 1e-5]; % Process noise covariance
-    R = 1000; % Measurement noise covariance
+    R = 0.0001; % Measurement noise covariance
 
     % Prediction step (상태방정식)
     SOC_pred = SOC_est + (Config.dt / (Config.cap * 3600)) * Config.coulomb_efficient * ik;
