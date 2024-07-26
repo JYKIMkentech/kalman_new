@@ -38,7 +38,7 @@ unique_soc_values = soc_values(unique_idx);
 % Interpolate SOC for the first UDDS voltage value
 initial_voltage = udds_voltage(1);
 %initial_soc = interp1(unique_ocv_values, unique_soc_values, initial_voltage, 'linear', 'extrap');
-initial_soc = 0.97;
+initial_soc = 0.90;
 
 fprintf('Initial voltage: %.2f V corresponds to SOC: %.2f%%\n', initial_voltage, initial_soc * 100);
 
@@ -141,7 +141,7 @@ figure;
 plot(udds_time, residuals, 'k', 'LineWidth', 1.5);
 xlabel('Time (s)');
 ylabel('Residual (V)');
-title('Residuals');
+title('Residuals between Measured and Estimated Terminal Voltage during UDDS Cycle');
 grid on;
 
 % SOC 추정 함수
@@ -188,7 +188,7 @@ function [SOC_est, V1_est, Vt_est, P] = soc_estimation(SOC_est, V1_est, Vt_true,
     V1_est = X_est(2);
 
     % Covariance update
-    P = ( P_predict - K * H_k ) * P_predict;
+    P = (P_predict - K * H_k) * P_predict;
     
     % Update the estimated terminal voltage
     Vt_est = interp1(soc_values, ocv_values, SOC_est, 'linear', 'extrap') + V1_est + Config.R0 * ik;
