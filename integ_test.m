@@ -38,7 +38,7 @@ unique_soc_values = soc_values(unique_idx);
 % Interpolate SOC for the first UDDS voltage value
 initial_voltage = udds_voltage(1);
 %initial_soc = interp1(unique_ocv_values, unique_soc_values, initial_voltage, 'linear', 'extrap');
-initial_soc = 0.97;
+initial_soc = 0.95;
 
 fprintf('Initial voltage: %.2f V corresponds to SOC: %.2f%%\n', initial_voltage, initial_soc * 100);
 
@@ -66,6 +66,8 @@ Vt_est = zeros(length(udds_current), 1);
 R0_used = zeros(length(udds_current), 1);
 R1_used = zeros(length(udds_current), 1);
 C_used = zeros(length(udds_current), 1);
+residuals = zeros(length(udds_current), 1);
+
 
 % EKF 초기화
 P = [1 0;
@@ -86,7 +88,7 @@ for k = 2:length(udds_current)
     delta_t = Config.dt; % dt 써도 되는데, 정확한 값을 위하여... (비교해보니까 거의 비슷하긴 함) 
     true_SOC(k) = true_SOC(k-1) + (udds_current(k) * delta_t) / (Config.cap * 3600); % 실제 soc = 전 soc + i * dt/q_total (sampling 시간 동안 흐르는 전류)
 
-    % R0,R1,C( SOC, I) Update
+    % R0, R1, C( SOC, I) Update
     R0 = interp1(SOC_unique, R0_unique, SOC_est(k-1), 'linear', 'extrap');
     R1 = interp1(SOC_unique, R1_unique, SOC_est(k-1), 'linear', 'extrap');
     C1 = interp1(SOC_unique, C_unique, SOC_est(k-1), 'linear', 'extrap');
@@ -101,7 +103,7 @@ for k = 2:length(udds_current)
     C_used(k) = C1;
 
     % SOC estimation using EKF
-    [SOC_est(k), V1_est(k), Vt_est(k), P] = soc_estimation(SOC_est(k-1), V1_est(k-1), udds_voltage(k), udds_current(k), Config, P, unique_soc_values, unique_ocv_values); % 추정 코드
+    [SOC_est(k), V1_est(k), Vt_est(k), P, residuals(k)] = soc_estimation(SOC_est(k-1), V1_est(k-1), udds_voltage(k), udds_current(k), Config, P, unique_soc_values, unique_ocv_values); % 추정 코드
 end
 
 % Create the result matrix as a Nx5 array
@@ -133,22 +135,20 @@ title('Measured vs Estimated Terminal Voltage during UDDS Cycle');
 legend('Measured V_t', 'Estimated V_t');
 grid on;
 
-% Calculate residuals between measured and estimated terminal voltage
-residuals = udds_voltage - Vt_est;
-
-% Plot the residuals
+% Plot Residuals
 figure;
 plot(udds_time, residuals, 'k', 'LineWidth', 1.5);
 xlabel('Time (s)');
 ylabel('Residual (V)');
-title('Residuals');
+title('Voltage Residuals during UDDS Cycle');
 grid on;
 
+
 % SOC 추정 함수
-function [SOC_est, V1_est, Vt_est, P] = soc_estimation(SOC_est, V1_est, Vt_true, ik, Config, P, soc_values, ocv_values)
-    Q = [1e-4 0; 
-         0 1e-4]; % Process noise covariance
-    R = 1000; % Measurement noise covariance
+function [SOC_est, V1_est, Vt_est, P, residual] = soc_estimation(SOC_est, V1_est, Vt_true, ik, Config, P, soc_values, ocv_values)
+    Q = [1e-5 0; 
+         0 1e-5]; % Process noise covariance
+    R = 0.0001; % Measurement noise covariance
 
     % Prediction step (상태방정식)
     SOC_pred = SOC_est + (Config.dt / (Config.cap * 3600)) * Config.coulomb_efficient * ik;
@@ -188,8 +188,11 @@ function [SOC_est, V1_est, Vt_est, P] = soc_estimation(SOC_est, V1_est, Vt_true,
     V1_est = X_est(2);
 
     % Covariance update
-    P = ( P_predict - K * H_k ) * P_predict;
+    P = P_predict - K * H_k * P_predict; % Updated covariance matrix
     
     % Update the estimated terminal voltage
     Vt_est = interp1(soc_values, ocv_values, SOC_est, 'linear', 'extrap') + V1_est + Config.R0 * ik;
+    
+    % Return the residual
+    residual = y_tilde;
 end
