@@ -13,8 +13,8 @@ soc_values = soc_ocv(:, 1);
 ocv_values = soc_ocv(:, 2);
 
 % 초기 추정값
-initial_soc = 0.96;
-initial_params = [0.01, 0.01, 1000]; % 초기 R0, R1, C 값
+initial_soc = 0.9901;
+initial_params = [0.0254, 0.0147,60.474645]; % 초기 R0, R1, C 값
 
 % 설정
 Config.dt = mean(diff(udds_time));
@@ -22,13 +22,17 @@ Config.cap = 2.90; % Ah
 Config.coulomb_efficient = 1;
 
 % 비용 함수 정의
-cost_function = @(params) voltage_error(params, initial_soc, udds_current, udds_voltage, Config, soc_values, ocv_values);
+cost_function = @(params) func_cost(params, initial_soc, udds_current, udds_voltage, Config, soc_values, ocv_values);
 
 % 최적화 옵션 설정
-options = optimoptions('lsqnonlin', 'Display', 'iter', 'TolFun', 1e-8, 'TolX', 1e-8); 
+options = optimoptions('fmincon', 'Display', 'iter', 'TolFun', 1e-8, 'TolX', 1e-8); 
+
+% 제약 조건 설정 (비음수 제약 조건 추가)
+lb = [0, 0, 0]; % 하한 (비음수)
+ub = []; % 상한 (없음)
 
 % 최적화 실행
-[optimized_params, resnorm] = lsqnonlin(cost_function, initial_params, [], [], options);
+[optimized_params, resnorm] = fmincon(cost_function, initial_params, [], [], [], [], lb, ub, [], options);
 
 % 결과 출력
 fprintf('Optimized R0: %.6f\n', optimized_params(1));
@@ -47,7 +51,13 @@ title('Measured vs Estimated Terminal Voltage during UDDS Cycle');
 legend('Measured V_t', 'Estimated V_t');
 grid on;
 
-% 비용 함수 정의
+% Cost function
+function cost = func_cost(params, initial_soc, current, voltage, Config, soc_values, ocv_values)
+    residuals = voltage_error(params, initial_soc, current, voltage, Config, soc_values, ocv_values);
+    cost = sum(residuals.^2);
+end
+
+% Vt-Vest residuals 
 function [residuals, Vt_est] = voltage_error(params, initial_soc, current, voltage, Config, soc_values, ocv_values)
     R0 = params(1);
     R1 = params(2);
