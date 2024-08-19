@@ -1,22 +1,21 @@
-clc; clear; close all;
+clc;clear;close all
 
 % Load optimized parameters
-load('optimized_params_filtered.mat', 'optimized_params_filtered');
+load('optimized_params_struct_final.mat')
 
+I_1C = 2.8992; % 1C에 해당하는 전류 [A]
 % Extract fields from the structure and flatten the arrays
-SOC = cell2mat({optimized_params_filtered.SOC});
-R0 = cell2mat({optimized_params_filtered.R0});
-R1 = cell2mat({optimized_params_filtered.R1});
-C = cell2mat({optimized_params_filtered.C});
+SOC = cell2mat({optimized_params_struct.SOC});
+R0 = cell2mat({optimized_params_struct.R0});
+R1 = cell2mat({optimized_params_struct.R1});
+C = cell2mat({optimized_params_struct.C});
+Crate = cell2mat({optimized_params_struct.Crate});
 
-% Remove duplicate SOC values
-[SOC_unique, unique_idx] = unique(SOC);
-R0_unique = R0(unique_idx);
-R1_unique = R1(unique_idx);
-C_unique = C(unique_idx);
+% Crate를 전류로 변환
+current = Crate * I_1C;
 
 % Load UDDS data
-load('C:\Users\deu04\OneDrive\바탕 화면\wykht8y7tg-1\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\Drive cycles\03-21-17_00.29 25degC_UDDS_Pan18650PF.mat');
+load('C:\Users\USER\Desktop\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\Drive cycles\03-21-17_00.29 25degC_UDDS_Pan18650PF.mat');
 udds_current = meas.Current; % UDDS 전류 데이터
 udds_voltage = meas.Voltage; % UDDS 전압 데이터
 udds_time = meas.Time; % UDDS 시간 데이터
@@ -41,10 +40,13 @@ initial_soc = interp1(unique_ocv_values, unique_soc_values, initial_voltage, 'li
 
 fprintf('Initial voltage: %.2f V corresponds to SOC: %.2f%%\n', initial_voltage, initial_soc * 100);
 
-% Initial values based on initial SOC
-initial_R0 = interp1(SOC_unique, R0_unique, initial_soc, 'linear', 'extrap');
-initial_R1 = interp1(SOC_unique, R1_unique, initial_soc, 'linear', 'extrap');
-initial_C1 = interp1(SOC_unique, C_unique, initial_soc, 'linear', 'extrap');
+% Initial Crate 계산
+initial_current = udds_current(1); % 첫 전류
+
+% 2D Interpolation for R0, R1, C using initial SOC and current 
+initial_R0 = interp2(SOC, current, R0, initial_soc, initial_current, 'linear', 'extrap');
+initial_R1 = interp2(SOC, current, R1, initial_soc, initial_current, 'linear', 'extrap');
+initial_C1 = interp2(SOC, current, C, initial_soc, initial_current, 'linear', 'extrap');
 
 % Config 구조체에 필드 추가
 Config.R0 = initial_R0;
@@ -53,7 +55,7 @@ Config.C1 = initial_C1;
 
 % Initialize SOC estimation
 SOC_est = zeros(length(udds_current), 1);
-SOC_est(1) = initial_soc; % (udds voltage 4.18v) 
+SOC_est(1) = initial_soc; 
 
 % Initialize true SOC using coulomb counting
 true_SOC = zeros(length(udds_current), 1);
@@ -75,7 +77,7 @@ Q = [1e-4 0;
 R = 0.025; % Measurement noise covariance 
 
 % Initial values
-V1_est(1) = udds_current(1) * Config.R1 * (1 - exp(-Config.dt / (Config.R1 * Config.C1))); % 초기 V1 값 (전 상태의 v1값이 없기때문에 앞의 항이 zero)
+V1_est(1) = udds_current(1) * Config.R1 * (1 - exp(-Config.dt / (Config.R1 * Config.C1))); % 초기 V1 값
 Vt_est(1) = udds_voltage(1); % 초기 측정 전압 = estimated 전압 
 R0_used(1) = Config.R0;
 R1_used(1) = Config.R1;
@@ -91,13 +93,16 @@ for k = 2:length(udds_current)
     Config.ik = udds_current(k); % 샘플링 시간동안 흐르는 전류 
 
     % True SOC calculation using coulomb counting
-    delta_t = Config.dt; % dt 써도 되는데, 정확한 값을 위하여... (비교해보니까 거의 비슷하긴 함) 
-    true_SOC(k) = true_SOC(k-1) + (udds_current(k) * delta_t) / (Config.cap * 3600); % 실제 soc = 전 soc + i * dt/q_total (sampling 시간 동안 흐르는 전류)
+    delta_t = Config.dt; 
+    true_SOC(k) = true_SOC(k-1) + (udds_current(k) * delta_t) / (Config.cap * 3600);
 
-    % R0,R1,C( SOC, I) Update
-    R0 = interp1(SOC_unique, R0_unique, SOC_est(k-1), 'linear', 'extrap');
-    R1 = interp1(SOC_unique, R1_unique, SOC_est(k-1), 'linear', 'extrap');
-    C1 = interp1(SOC_unique, C_unique, SOC_est(k-1), 'linear', 'extrap');
+    % 현재 전류 계산
+    current_k = udds_current(k);
+
+    % 2D Interpolation for R0, R1, C(SOC, current)
+    R0 = interp2(SOC, current, R0, SOC_est(k-1), current_k, 'linear', 'extrap');
+    R1 = interp2(SOC, current, R1, SOC_est(k-1), current_k, 'linear', 'extrap');
+    C1 = interp2(SOC, current, C, SOC_est(k-1), current_k, 'linear', 'extrap');
     
     Config.R0 = R0;
     Config.R1 = R1;
@@ -109,12 +114,13 @@ for k = 2:length(udds_current)
     C_used(k) = C1;
 
     % SOC estimation using EKF
-    [SOC_est(k), V1_est(k), Vt_est(k), P, H_k] = soc_estimation(SOC_est(k-1), V1_est(k-1), udds_voltage(k), udds_current(k), Config, P, unique_soc_values, unique_ocv_values,Q,R); % 추정 코드
+    [SOC_est(k), V1_est(k), Vt_est(k), P, H_k] = soc_estimation(SOC_est(k-1), V1_est(k-1), udds_voltage(k), udds_current(k), Config, P, unique_soc_values, unique_ocv_values,Q,R);
 
     % Store H vector components
     H1(k) = H_k(1);
     H2(k) = H_k(2);
 end
+
 
 % Calculate residuals between measured and estimated terminal voltage
 residuals = udds_voltage - Vt_est;
