@@ -2,7 +2,7 @@ clc;
 clear;
 
 % C/20 충전/방전 데이터 불러오기
-load('C:\Users\USER\Desktop\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\C20 OCV and 1C discharge tests_start_of_tests\05-08-17_13.26 C20 OCV Test_C20_25dC.mat');
+load('C:\Users\deu04\OneDrive\바탕 화면\wykht8y7tg-1\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\C20 OCV and 1C discharge tests_start_of_tests\05-08-17_13.26 C20 OCV Test_C20_25dC.mat');
 current = meas.Current; % 전류 데이터
 voltage = meas.Voltage; % 전압 데이터
 time = meas.Time; % 시간 데이터
