@@ -37,8 +37,7 @@ unique_soc_values = soc_values(unique_idx);
 
 % Interpolate SOC for the first UDDS voltage value
 initial_voltage = udds_voltage(1);
-%initial_soc = interp1(unique_ocv_values, unique_soc_values, initial_voltage, 'linear', 'extrap');
-initial_soc = 0.95;
+initial_soc = interp1(unique_ocv_values, unique_soc_values, initial_voltage, 'linear', 'extrap');
 
 fprintf('Initial voltage: %.2f V corresponds to SOC: %.2f%%\n', initial_voltage, initial_soc * 100);
 
@@ -60,18 +59,20 @@ SOC_est(1) = initial_soc; % (udds voltage 4.18v)
 true_SOC = zeros(length(udds_current), 1);
 true_SOC(1) = initial_soc; 
 
+% Initialize noisy SOC using noisy current
+noisy_SOC = zeros(length(udds_current), 1);
+noisy_SOC(1) = initial_soc;
+
 % Preallocate arrays for V1, Vt, R0, R1, and C
 V1_est = zeros(length(udds_current), 1);
 Vt_est = zeros(length(udds_current), 1);
 R0_used = zeros(length(udds_current), 1);
 R1_used = zeros(length(udds_current), 1);
 C_used = zeros(length(udds_current), 1);
-residuals = zeros(length(udds_current), 1);
-
 
 % EKF 초기화
-P = [1 0;
-    0 1]; % Initial estimation error covariance
+P = [0.0004 0;
+    0 0]; % Initial estimation error covariance
 
 % Initial values
 V1_est(1) = udds_current(1) * Config.R1 * (1 - exp(-Config.dt / (Config.R1 * Config.C1))); % 초기 V1 값 (전 상태의 v1값이 없기때문에 앞의 항이 zero)
@@ -80,15 +81,42 @@ R0_used(1) = Config.R0;
 R1_used(1) = Config.R1;
 C_used(1) = Config.C1;
 
+% Define the Markov chain parameters for noise generation
+num_states = 2;
+noise_levels = [-0.01, 0.01]; % Example noise levels
+transition_matrix = [0.9, 0.1; 0.1, 0.9]; % Transition probabilities
+
+% Initialize the state
+current_state = 1; % Start from state 1
+
+% Generate noise for the current using Markov chain
+noise = zeros(length(udds_current), 1);
+for k = 2:length(udds_current)
+    % Determine next state based on transition probabilities
+    if rand < transition_matrix(current_state, 1)
+        current_state = 1;
+    else
+        current_state = 2;
+    end
+    % Apply noise
+    noise(k) = noise_levels(current_state);
+end
+
+% Add noise to the UDDS current
+noisy_current = udds_current + noise;
+
 % Simulation loop
 for k = 2:length(udds_current)
-    Config.ik = udds_current(k); % 샘플링 시간동안 흐르는 전류 
+    Config.ik = noisy_current(k); % 샘플링 시간동안 흐르는 전류 
 
     % True SOC calculation using coulomb counting
     delta_t = Config.dt; % dt 써도 되는데, 정확한 값을 위하여... (비교해보니까 거의 비슷하긴 함) 
     true_SOC(k) = true_SOC(k-1) + (udds_current(k) * delta_t) / (Config.cap * 3600); % 실제 soc = 전 soc + i * dt/q_total (sampling 시간 동안 흐르는 전류)
 
-    % R0, R1, C( SOC, I) Update
+    % Noisy SOC calculation using coulomb counting
+    noisy_SOC(k) = noisy_SOC(k-1) + (noisy_current(k) * delta_t) / (Config.cap * 3600); % 노이즈가 추가된 SOC
+
+    % R0,R1,C( SOC, I) Update
     R0 = interp1(SOC_unique, R0_unique, SOC_est(k-1), 'linear', 'extrap');
     R1 = interp1(SOC_unique, R1_unique, SOC_est(k-1), 'linear', 'extrap');
     C1 = interp1(SOC_unique, C_unique, SOC_est(k-1), 'linear', 'extrap');
@@ -103,14 +131,14 @@ for k = 2:length(udds_current)
     C_used(k) = C1;
 
     % SOC estimation using EKF
-    [SOC_est(k), V1_est(k), Vt_est(k), P, residuals(k)] = soc_estimation(SOC_est(k-1), V1_est(k-1), udds_voltage(k), udds_current(k), Config, P, unique_soc_values, unique_ocv_values); % 추정 코드
+    [SOC_est(k), V1_est(k), Vt_est(k), P] = soc_estimation(SOC_est(k-1), V1_est(k-1), udds_voltage(k), noisy_current(k), Config, P, unique_soc_values, unique_ocv_values); % 추정 코드
 end
 
 % Create the result matrix as a Nx5 array
-result_matrix = [true_SOC, SOC_est, R0_used, R1_used, C_used];
+result_matrix = [true_SOC, noisy_SOC, SOC_est, R0_used, R1_used, C_used];
 
 % Define column names
-column_names = {'True_SOC', 'Estimated_SOC', 'R0', 'R1', 'C'};
+column_names = {'True_SOC', 'Noisy_SOC', 'Estimated_SOC', 'R0', 'R1', 'C'};
 
 % Save the result matrix and column names to a .mat file
 save('result_matrix.mat', 'result_matrix', 'column_names');
@@ -118,11 +146,12 @@ save('result_matrix.mat', 'result_matrix', 'column_names');
 % Plot SOC
 figure;
 plot(udds_time, true_SOC, 'b', 'LineWidth', 1.5); hold on;
+plot(udds_time, noisy_SOC, 'g', 'LineWidth', 1.5);
 plot(udds_time, SOC_est, 'r--', 'LineWidth', 1.5);
 xlabel('Time (s)');
 ylabel('SOC');
-title('True SOC vs Estimated SOC during UDDS Cycle');
-legend('True SOC', 'Estimated SOC');
+title('True SOC, Noisy SOC, and Estimated SOC during UDDS Cycle');
+legend('True SOC', 'Noisy SOC', 'Estimated SOC');
 grid on;
 
 % Plot Vt
@@ -135,20 +164,11 @@ title('Measured vs Estimated Terminal Voltage during UDDS Cycle');
 legend('Measured V_t', 'Estimated V_t');
 grid on;
 
-% Plot Residuals
-figure;
-plot(udds_time, residuals, 'k', 'LineWidth', 1.5);
-xlabel('Time (s)');
-ylabel('Residual (V)');
-title('Voltage Residuals during UDDS Cycle');
-grid on;
-
-
 % SOC 추정 함수
-function [SOC_est, V1_est, Vt_est, P, residual] = soc_estimation(SOC_est, V1_est, Vt_true, ik, Config, P, soc_values, ocv_values)
+function [SOC_est, V1_est, Vt_est, P] = soc_estimation(SOC_est, V1_est, Vt_true, ik, Config, P, soc_values, ocv_values)
     Q = [1e-5 0; 
          0 1e-5]; % Process noise covariance
-    R = 1000; % Measurement noise covariance
+    R = 1e-2; % Measurement noise covariance
 
     % Prediction step (상태방정식)
     SOC_pred = SOC_est + (Config.dt / (Config.cap * 3600)) * Config.coulomb_efficient * ik;
@@ -188,11 +208,10 @@ function [SOC_est, V1_est, Vt_est, P, residual] = soc_estimation(SOC_est, V1_est
     V1_est = X_est(2);
 
     % Covariance update
-    P = (P_predict - K * H_k) * P_predict; % Updated covariance matrix
+    P = P_predict - K * H_k * P_predict;
     
     % Update the estimated terminal voltage
     Vt_est = interp1(soc_values, ocv_values, SOC_est, 'linear', 'extrap') + V1_est + Config.R0 * ik;
-    
-    % Return the residual
-    residual = y_tilde;
 end
+
+

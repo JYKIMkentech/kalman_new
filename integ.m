@@ -134,7 +134,7 @@ function [SOC_est, V1_est, Vt_est, P] = soc_estimation(SOC_est, V1_est, Vt_true,
     V1_est = X_est(2);
 
     % Covariance update
-    P = (P_predict - K * H_k) * P_predict;
+    P = P_predict - K * H_k * P_predict;
     
     % Update the estimated terminal voltage
     Vt_est = interp1(soc_values, ocv_values, SOC_est, 'linear', 'extrap') + V1_est + Config.R0 * ik;

@@ -2,8 +2,7 @@
 clc; clear; close all;
 
 % 데이터 로드
-%data = load('C:\Users\deu04\OneDrive\바탕 화면\wykht8y7tg-1\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\5 pulse disch\03-11-17_08.47 25degC_5Pulse_HPPC_Pan18650PF.mat');
-data = load('C:\Users\김준연\Desktop\wykht8y7tg-1\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\5 pulse disch\03-11-17_08.47 25degC_5Pulse_HPPC_Pan18650PF.mat');
+data = load('C:\Users\USER\Desktop\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\5 pulse disch\03-11-17_08.47 25degC_5Pulse_HPPC_Pan18650PF.mat');
 % 시간, 전압, 전류 데이터 추출
 
 time = data.meas.Time;
@@ -198,7 +197,12 @@ for i = 1:length(step_dis)
     deltaV_exp = data(step_dis(i)).deltaV;
     time_exp = data(step_dis(i)).t;
     avgI = data(step_dis(i)).avgI;  % 각 스텝의 평균 전류 가져오기
-    m = 2 / data(step_dis(i)).timeAt632; % timeAt632의 역수를 m으로 설정
+    
+    
+    m = 2 / data(step_dis(i)).timeAt632; 
+    
+    % m의 최대값을 1.5로 제한
+    m = min(m, 1.5);
 
     % 스텝의 시간 길이 확인
     step_duration = time_exp(end) - time_exp(1);
@@ -285,7 +289,6 @@ R1_values = [optimized_params_struct.R1];
 R1_mean = mean(R1_values);
 R1_std = std(R1_values);
 
-<<<<<<< HEAD
 % 이상치를 감지하기 위한 임계값 설정 (예: 평균 ± 3 표준편차)
 threshold = 3;
 outliers = abs(R1_values - R1_mean) > threshold * R1_std;
@@ -303,10 +306,6 @@ C_values = [optimized_params_filtered.C];
 
 SOC_values = [optimized_params_filtered.SOC];
 Crate_values = [optimized_params_filtered.Crate];
-=======
-SOC_values = [optimized_params_struct.SOC];
-Crate_values = [optimized_params_struct.Crate];
->>>>>>> 7f642c58e08c3f925f91d28072502f70e3bf632f
 
 unique_SOC = unique(SOC_values);
 unique_Crate = unique(Crate_values);
@@ -411,8 +410,3 @@ end
 
 
 
-
-<<<<<<< HEAD
-=======
-
->>>>>>> 7f642c58e08c3f925f91d28072502f70e3bf632f
