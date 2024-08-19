@@ -2,11 +2,8 @@
 clc; clear; close all;
 
 % 데이터 로드
-<<<<<<< HEAD
+%data = load('C:\Users\USER\Desktop\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\5 pulse disch\03-11-17_08.47 25degC_5Pulse_HPPC_Pan18650PF.mat');
 data = load('C:\Users\USER\Desktop\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\5 pulse disch\03-11-17_08.47 25degC_5Pulse_HPPC_Pan18650PF.mat');
-=======
-data = load('C:\Users\deu04\OneDrive\바탕 화면\wykht8y7tg-1\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\5 pulse disch\03-11-17_08.47 25degC_5Pulse_HPPC_Pan18650PF.mat');
->>>>>>> e7f2769f8aa790ff2de5cbbbc93cbe90a153e503
 % 시간, 전압, 전류 데이터 추출
 
 time = data.meas.Time;
@@ -190,21 +187,14 @@ for i = 1:length(step_dis)
     deltaV_exp = data(step_dis(i)).deltaV;
     time_exp = data(step_dis(i)).t;
     avgI = data(step_dis(i)).avgI;  % 각 스텝의 평균 전류 가져오기
+        
+    %m = 2 / data(step_dis(i)).timeAt632; 
     
-<<<<<<< HEAD
-    
-    m = 2 / data(step_dis(i)).timeAt632; 
-    
-    % m의 최대값을 1.5로 제한
-    m = min(m, 1.5);
-=======
-    % m값 계산
-    m = 2 / data(step_dis(i)).timeAt632; 
-    %m = 1.4;
-
     % m의 최대값을 1.5로 제한
     %m = min(m, 1.5);
->>>>>>> e7f2769f8aa790ff2de5cbbbc93cbe90a153e503
+
+    m = 1.05;
+
 
     % 스텝의 시간 길이 확인
     step_duration = time_exp(end) - time_exp(1);
@@ -300,7 +290,8 @@ outliers = abs(R1_values - R1_mean) > threshold * R1_std;
 optimized_params_filtered = optimized_params_struct(~outliers);
 
 % 이상치가 제거된 데이터를 저장
-save('optimized_params_filtered.mat', 'optimized_params_filtered');
+save('optimized_params_filtered_105.mat', 'optimized_params_filtered');
+save('optimized_params_struct_105.mat', 'optimized_params_struct');
 
 % 이상치가 제거된 데이터로 그래프 그리기
 R0_values = [optimized_params_filtered.R0];
@@ -382,9 +373,9 @@ R1_mean_filtered = mean([optimized_params_filtered.R1]);
 C_mean_filtered = mean([optimized_params_filtered.C]);
 
 % 결과 출력
-fprintf('R0의 평균 값 (이상치 제거 후): %.6f\n', R0_mean_filtered);
-fprintf('R1의 평균 값 (이상치 제거 후): %.6f\n', R1_mean_filtered);
-fprintf('C의 평균 값 (이상치 제거 후): %.6f\n', C_mean_filtered);
+fprintf('R0의 평균 값 : %.6f\n', R0_mean_filtered);
+fprintf('R1의 평균 값 : %.6f\n', R1_mean_filtered);
+fprintf('C의 평균 값 : %.6f\n', C_mean_filtered);
 
 %% 함수
 
@@ -411,8 +402,3 @@ function voltage = model_func(time, R0, R1, C, I)
     voltage = I * (R0 + R1 * (1 - exp(-time / (R1 * C))));
 end
 
-<<<<<<< HEAD
-
-
-=======
->>>>>>> e7f2769f8aa790ff2de5cbbbc93cbe90a153e503
