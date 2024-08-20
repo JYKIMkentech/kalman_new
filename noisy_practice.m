@@ -1,81 +1,107 @@
-clc;clear;close all
+clc;
+clear;
+close all;
+
+% Load UDDS data
+load('C:\Users\deu04\OneDrive\바탕 화면\wykht8y7tg-1\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\Drive cycles\03-21-17_00.29 25degC_UDDS_Pan18650PF.mat');
+udds_current = meas.Current; % UDDS 전류 데이터
+udds_voltage = meas.Voltage; % UDDS 전압 데이터
+udds_time = meas.Time; % UDDS 시간 데이터
 
 % 파라미터 설정
 n = 21;                    % 상태의 개수
-sigma = 1e-3;              % 1 시그마에 5개 구간을 포함하도록 설정 (1 mA)
-noise_levels = linspace(-2e-3, 2e-3, n); % -2mA에서 +2mA로 20개 구간
+sigma = 1e-3;              % 노이즈 분포의 표준편차 (1 mA)
+noise_levels = linspace(-2e-3, 2e-3, n); % -2mA에서 +2mA로 21개 구간
 
 % 전이 상태 행렬 P 초기화
 P = zeros(n, n);
 
-% 전이 확률 계산
+% 전이 확률 계산 (비대칭 설정)
 for i = 1:n
     for j = 1:n
-        P(i, j) = normpdf(noise_levels(j), noise_levels(i), sigma);
+        % 비대칭 노이즈를 위한 전이 확률 계산
+        if noise_levels(j) > noise_levels(i)
+            P(i, j) = normpdf(noise_levels(j), noise_levels(i), sigma) * 1.5; % 양수 방향으로 편향
+        else
+            P(i, j) = normpdf(noise_levels(j), noise_levels(i), sigma);
+        end
     end
-    P(i, :) = P(i, :) / sum(P(i, :)); % 각 행의 합이 1이 되도록 정규화 (normpdf)
+    P(i, :) = P(i, :) / sum(P(i, :)); % 각 행의 합이 1이 되도록 정규화
 end
 
 % 노이즈 벡터 Q 초기화
 Q = noise_levels';
 
-% True current 예시
-true_current = [0 0 0 5 5 5 0 0 0 -3 -3 -3] * 1e-3; % A 단위로 스케일링 (mA -> A)
+% UDDS 전류 데이터를 true_current로 설정
+true_current = udds_current; % UDDS 전류 데이터를 사용하여 true_current 설정
 
 % 배터리 용량 및 초기 SOC 설정
 battery_capacity = 2.9; % 배터리 용량 2.9 Ah
-initial_soc = 1;        % 초기 SOC는 100% (1.0)
+initial_soc = 0.9901;   % 초기 SOC
 num_steps = length(true_current);
-dt = 1; % 시간 간격 [s]
+dt = mean(diff(udds_time)); % UDDS 데이터의 시간 간격
 
-% SOC 계산을 위한 적분 변수 초기화
+% SOC 계산을 위한 변수 초기화
 true_soc = zeros(1, num_steps);
-noisy_current = zeros(1, num_steps);
-noisy_soc = zeros(1, num_steps);
+noisy_soc_markov = zeros(1, num_steps);
+noisy_soc_rand = zeros(1, num_steps);
+
+noisy_current_markov = zeros(1, num_steps);
+noisy_current_rand = zeros(1, num_steps);
 
 % 초기 SOC 설정
 true_soc(1) = initial_soc;
-noisy_soc(1) = initial_soc;
+noisy_soc_markov(1) = initial_soc;
+noisy_soc_rand(1) = initial_soc;
 
 % 초기 상태 설정 (중앙 상태에서 시작)
 current_state = ceil(n/2);
 
-% Markov chain
+% Markov chain 및 랜덤 노이즈 추가
 for t = 2:num_steps
-    % 상태 전이
+    % 마르코프 체인 기반 노이즈
     current_state = randsample(1:n, 1, true, P(current_state, :));
+    noisy_current_markov(t) = true_current(t) + Q(current_state);
     
-    % 노이즈 추가 
-    noisy_current(t) = true_current(t) + Q(current_state);
+    % 랜덤 노이즈 추가 (-2mA ~ 2mA 범위)
+    noisy_current_rand(t) = true_current(t) + (rand * 4e-3) - 2e-3;
     
     % True SOC 계산 
-    true_soc(t) = true_soc(t-1) - (true_current(t) * dt) / battery_capacity;
+    true_soc(t) = true_soc(t-1) + (true_current(t) * dt) / (battery_capacity * 3600);
     
-    % Noisy SOC 계산
-    noisy_soc(t) = noisy_soc(t-1) - (noisy_current(t) * dt) / battery_capacity;
+    % Noisy SOC 계산 (Markov noise)
+    noisy_soc_markov(t) = noisy_soc_markov(t-1) + (noisy_current_markov(t) * dt) / (battery_capacity * 3600);
+    
+    % Noisy SOC 계산 (Random noise)
+    noisy_soc_rand(t) = noisy_soc_rand(t-1) + (noisy_current_rand(t) * dt) / (battery_capacity * 3600);
 end
 
-% plot
+% 전류 데이터 비교 plot
 figure;
-subplot(2,1,1);
-plot(1:num_steps, true_soc * 100, 'b-', 'LineWidth', 2); % True SOC (%)
+plot(1:num_steps, true_current , 'b-', 'LineWidth', 2); % True current (mA)
 hold on;
-plot(1:num_steps, noisy_soc * 100, 'r--', 'LineWidth', 2); % Noisy SOC (%)
+plot(1:num_steps, noisy_current_markov , 'r--', 'LineWidth', 2); % Noisy current (Markov)
+plot(1:num_steps, noisy_current_rand , 'g-.', 'LineWidth', 2); % Noisy current (Random)
 xlabel('Time Step');
-ylabel('SOC (%)');
-title('True SOC vs Noisy SOC');
-legend('True SOC', 'Noisy SOC');
+ylabel('Current (A)');
+title('True Current vs Noisy Current (Markov vs Random Noise)');
+legend('True Current', 'Noisy Current (Markov)', 'Noisy Current (Random)');
+xlim([221000 221010])
 grid on;
 hold off;
 
-subplot(2,1,2);
-plot(1:num_steps, true_current * 1e3, 'b-', 'LineWidth', 2); % True current (mA)
+% SOC 비교 plot
+figure;
+plot(1:num_steps, true_soc , 'b-', 'LineWidth', 2); % True SOC (%)
 hold on;
-plot(1:num_steps, noisy_current * 1e3, 'r--', 'LineWidth', 2); % Noisy current (mA)
+plot(1:num_steps, noisy_soc_markov , 'r--', 'LineWidth', 2); % Noisy SOC (Markov)
+plot(1:num_steps, noisy_soc_rand , 'g-.', 'LineWidth', 2); % Noisy SOC (Random)
 xlabel('Time Step');
-ylabel('Current (mA)');
-title('True Current vs Noisy Current');
-legend('True Current', 'Noisy Current');
+ylabel('SOC (%)');
+title('True SOC vs Noisy SOC (Markov vs Random Noise)');
+legend('True SOC', 'Noisy SOC (Markov)', 'Noisy SOC (Random)');
+xlim([221000 222000])
 grid on;
 hold off;
+
 
