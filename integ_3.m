@@ -1,4 +1,3 @@
-% 초기화
 clear; clc; close all;
 
 % 데이터 로드
@@ -52,6 +51,34 @@ legend('Measured V_t', 'Estimated V_t');
 xlim([0 100])
 grid on;
 
+% R1, C1 범위 설정
+R1_range = linspace(0.001, 0.1, 50);
+C1_range = linspace(1, 100, 50);
+
+% 비용 함수 계산을 위한 배열 초기화
+cost_values = zeros(length(R1_range), length(C1_range));
+
+% 비용 함수 계산
+for i = 1:length(R1_range)
+    for j = 1:length(C1_range)
+        params = [R1_range(i), C1_range(j)];
+        cost_values(i, j) = func_cost(params, fixed_R0, initial_soc, udds_current, udds_voltage, Config, soc_values, ocv_values);
+    end
+end
+
+% 3D 그래프 플롯
+[R1_mesh, C1_mesh] = meshgrid(R1_range, C1_range);
+
+figure;
+surf(R1_mesh, C1_mesh, cost_values');
+xlabel('R1 (Ohms)');
+ylabel('C1 (Farads)');
+zlabel('Cost');
+title('Cost Function Surface for R0, R1, C1');
+colormap('viridis');
+colorbar;
+grid on;
+
 % 시간 가중치가 적용된 비용 함수
 function cost = func_cost(params, R0, initial_soc, current, voltage, Config, soc_values, ocv_values, time)
     % 시간 가중치 정의
@@ -92,4 +119,5 @@ function [residuals, Vt_est] = voltage_error(params, initial_soc, current, volta
 
     residuals = Vt_est - voltage;  % 잔차 계산
 end
+
 
