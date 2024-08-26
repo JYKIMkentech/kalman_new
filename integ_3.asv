@@ -21,8 +21,8 @@ Config.dt = mean(diff(udds_time));  % 시간 간격
 Config.cap = 2.90;                  % 배터리 용량 (Ah)
 Config.coulomb_efficient = 1;       % 쿨롱 효율
 
-% 비용 함수 정의 (시간 가중치 미적용)
-cost_function = @(params) func_cost(params, fixed_R0, initial_soc, udds_current, udds_voltage, Config, soc_values, ocv_values);
+% 비용 함수 정의 (시간 가중치 포함)
+cost_function = @(params) func_cost(params, fixed_R0, initial_soc, udds_current, udds_voltage, Config, soc_values, ocv_values, udds_time);
 
 % 최적화 옵션 설정
 options = optimoptions('fmincon', 'Display', 'iter', 'TolFun', 1e-8, 'TolX', 1e-8); 
@@ -79,12 +79,16 @@ colormap('viridis');
 colorbar;
 grid on;
 
-% 비용 함수 정의 (시간 가중치 없음)
-function cost = func_cost(params, R0, initial_soc, current, voltage, Config, soc_values, ocv_values)
+% 시간 가중치가 적용된 비용 함수
+function cost = func_cost(params, R0, initial_soc, current, voltage, Config, soc_values, ocv_values, time)
+   
+
     % 잔차(residual) 계산
     [residuals, ~] = voltage_error([R0, params], initial_soc, current, voltage, Config, soc_values, ocv_values);
     
-    % 비용 계산
+  
+    
+    % 가중치가 적용된 비용 계산
     cost = sum(residuals.^2);
 end
 
@@ -112,4 +116,5 @@ function [residuals, Vt_est] = voltage_error(params, initial_soc, current, volta
 
     residuals = Vt_est - voltage;  % 잔차 계산
 end
+
 
