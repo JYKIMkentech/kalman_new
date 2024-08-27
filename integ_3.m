@@ -20,8 +20,8 @@ Config.cap = 2.90;                  % 배터리 용량 (Ah)
 Config.coulomb_efficient = 1;       % 쿨롱 효율
 
 % R1과 C1의 범위 설정
-R1_range = linspace(0.008, 0.03, 10);  % R1 값의 범위 (Ohms)
-C1_range = linspace(3, 100000, 10);  % C1 값의 범위 (Farads)
+R1_range = linspace(0.0001, 10, 16);  % R1 값의 범위 (Ohms)
+C1_range = linspace(15, 100000, 16);  % C1 값의 범위 (Farads)
 
 % 비용 함수 계산을 위한 배열 초기화
 cost_values = zeros(length(R1_range), length(C1_range));
@@ -38,17 +38,17 @@ end
 [R1_mesh, C1_mesh] = meshgrid(R1_range, C1_range);
 
 figure;
-surf(R1_mesh, C1_mesh, cost_values', 'EdgeColor', 'none');  % 'EdgeColor' 옵션으로 메모리 절약
-xlabel('R1 (Ohms)');
-ylabel('C1 (Farads)');
+surf(R1_mesh, log10(C1_mesh), log10(cost_values'), 'EdgeColor', 'none');  % 'EdgeColor' 옵션으로 메모리 절약
+xlabel('R1 ');
+ylabel('C1 ');
 zlabel('Cost');
-title('Cost Function Surface around R1 and C1');
-%colorbar;
+title('Cost');
+colorbar;
 grid on;
 
 % 2D 등고선 그래프 플롯
 figure;
-contourf(R1_mesh, C1_mesh, cost_values', 20, 'LineColor', 'none');  % 레벨 수 줄임
+contourf(R1_mesh, log10(C1_mesh), log10(cost_values'), 20, 'LineColor', 'none');  % 레벨 수 줄임
 xlabel('R1 (Ohms)');
 ylabel('C1 (Farads)');
 title('Cost Function Contour Plot around R1 and C1');
@@ -71,7 +71,6 @@ problem = createOptimProblem('fmincon', ...
                              'ub', ub, ...
                              'options', options);
 
-% MultiStart 객체 생성
 ms = MultiStart('UseParallel', true, 'StartPointsToRun', 'all');
 
 % MultiStart 실행
