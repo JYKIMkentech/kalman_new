@@ -52,8 +52,8 @@ xlim([0 100])
 grid on;
 
 % R1, C1 범위 설정
-R1_range = linspace(0.001, 0.1, 50);
-C1_range = linspace(1, 100, 50);
+R1_range = linspace(0.001, 0.1, 50000);
+C1_range = linspace(1, 100, 500000);
 
 % 비용 함수 계산을 위한 배열 초기화
 cost_values = zeros(length(R1_range), length(C1_range));
