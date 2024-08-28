@@ -19,8 +19,8 @@ Config.cap = 2.90;                  % 배터리 용량 (Ah)
 Config.coulomb_efficient = 1;       % 쿨롱 효율
 
 % R1과 C1의 범위 설정
-R1_range = linspace(0.1, 0.2, 6);  % R1 값의 범위 (Ohms)
-C1_range = linspace(10, 1300, 6);  % C1 값의 범위 (Farads)
+R1_range = linspace(0.01, 1, 20);  % R1 값의 범위 (Ohms)
+C1_range = linspace(1, 1300, 20);  % C1 값의 범위 (Farads)
 
 results = struct('R0', [], 'R1', [], 'C1', [], 'Vt_est', [], 'Measured_Voltage', [], 'Residuals', [], 'Cost', [] );
 
@@ -76,15 +76,11 @@ grid on;
 
 % 2D 등고선 플롯
 figure;
-contourf(R1_mesh, C1_mesh, log10(Cost_mesh), 30);  % 20개의 등고선 레벨
-xlabel('R1 (Ohms)');
+contourf(R1_mesh, C1_mesh, log10(Cost_mesh), 20); 
 ylabel('C1 (Farads)');
 title('Cost Contour Plot');
 colorbar;
 grid on;
-
-
-
 
 %% function
 
