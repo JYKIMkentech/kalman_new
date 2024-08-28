@@ -20,8 +20,8 @@ Config.cap = 2.90;                  % 배터리 용량 (Ah)
 Config.coulomb_efficient = 1;       % 쿨롱 효율
 
 % R1과 C1의 범위 설정
-R1_range = linspace(0.1, 0.2, 16);  % R1 값의 범위 (Ohms)
-C1_range = linspace(10, 1300, 16);  % C1 값의 범위 (Farads)
+R1_range = linspace(0.1, 0.2, 6);  % R1 값의 범위 (Ohms)
+C1_range = linspace(10, 1300, 6);  % C1 값의 범위 (Farads)
 
 % 비용 함수 계산을 위한 배열 초기화
 cost_values = zeros(length(R1_range), length(C1_range));
@@ -38,7 +38,7 @@ end
 [R1_mesh, C1_mesh] = meshgrid(R1_range, C1_range);
 
 figure;
-surf(R1_mesh, log10(C1_mesh), log10(cost_values'), 'EdgeColor', 'none');  % 'EdgeColor' 옵션으로 메모리 절약
+surf(R1_mesh, log10(C1_mesh), log10(cost_values'), 'EdgeColor', 'none');  
 xlabel('R1 ');
 ylabel('log C1 ');
 zlabel('Cost');
@@ -48,20 +48,19 @@ grid on;
 
 % 2D 등고선 그래프 플롯
 figure;
-contourf(R1_mesh, log10(C1_mesh), log10(cost_values'), 20, 'LineColor', 'none');  % 레벨 수 줄임
-xlabel('R1 ');
+contourf(R1_mesh, log10(C1_mesh), log10(cost_values'), 20, 'LineColor', 'none');  
 ylabel('logC1 ');
 title('log Cost ');
 colorbar;
 grid on;
 
 % 초기 추정값 (초기 guess)
-initial_params = [0.014184, 21.465];  % R1, C1 초기값
+initial_params = [0.014184, 1.465];  % R1, C1 초기값
 
 % fmincon 옵션 설정
 options = optimoptions('fmincon', 'Display', 'iter', 'Algorithm', 'sqp');
-lb = []; %initial_params * 0.5;
-ub = []; %initial_params * 1.5;
+lb = [];
+ub = []; %initial_params * 3;
 
 % fmincon 문제 정의
 problem = createOptimProblem('fmincon', ...
@@ -85,7 +84,7 @@ fprintf('Optimal R1: %.6f Ohms\n', optimal_R1);
 fprintf('Optimal C1: %.6f Farads\n', optimal_C1);
 
 % 최적화된 파라미터로 Vt_est 계산
-[~, Vt_est] = voltage_error([fixed_R0, optimal_R1, optimal_C1], initial_soc, udds_current, udds_voltage, Config, soc_values, ocv_values, udds_time);
+[residuals, Vt_est] = voltage_error([fixed_R0, optimal_R1, optimal_C1], initial_soc, udds_current, udds_voltage, Config, soc_values, ocv_values, udds_time);
 
 % 최적화 결과 시각화
 figure;
@@ -117,11 +116,13 @@ function [residuals, Vt_est] = voltage_error(params, initial_soc, current, volta
     SOC_est = zeros(num_samples, 1);  % SOC 추정값
     V1_est = zeros(num_samples, 1);   % V1 추정값
     Vt_est = zeros(num_samples, 1);   % 단자 전압 추정값
+    residuals = zeros(num_samples, 1); % 잔차 벡터 초기화
 
     SOC_est(1) = initial_soc;  % 초기 SOC 설정
     dt_1 = time_data(2) - time_data(1);  % 첫 번째 샘플의 시간 간격
     V1_est(1) = current(1) * R1 * (1 - exp(-dt_1 / (R1 * C1)));  % 초기 V1 추정
     Vt_est(1) = voltage(1);  % 초기 전압 설정
+    residuals(1) = Vt_est(1) - voltage(1);  % 초기 잔차 계산
 
     for k = 2:num_samples
         ik = current(k);
@@ -130,9 +131,8 @@ function [residuals, Vt_est] = voltage_error(params, initial_soc, current, volta
         SOC_est(k) = SOC_est(k-1) + (dt_k / (Config.cap * 3600)) * Config.coulomb_efficient * ik;
         V1_est(k) = exp(-dt_k / (R1 * C1)) * V1_est(k-1) + (1 - exp(-dt_k / (R1 * C1))) * ik * R1;
         Vt_est(k) = interp1(soc_values, ocv_values, SOC_est(k), 'linear', 'extrap') + V1_est(k) + R0 * ik;
+        
+        residuals(k) = Vt_est(k) - voltage(k);  % 각 샘플에 대한 잔차 계산
     end
-
-    residuals = Vt_est - voltage;  % 잔차 계산
 end
-
 
