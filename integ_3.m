@@ -1,7 +1,7 @@
 clear; clc; close all;
 
 % 데이터 로드
-load('C:\Users\deu04\OneDrive\바탕 화면\wykht8y7tg-1\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\Drive cycles\03-21-17_00.29 25degC_UDDS_Pan18650PF.mat');
+load('C:\Users\USER\Desktop\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\Drive cycles\03-21-17_00.29 25degC_UDDS_Pan18650PF.mat');
 udds_current = meas.Current;  % 전류 데이터
 udds_voltage = meas.Voltage;  % 전압 데이터
 udds_time = meas.Time;        % 시간 데이터
@@ -52,8 +52,8 @@ xlim([0 100])
 grid on;
 
 % R1, C1 범위 설정
-R1_range = linspace(0.001, 0.1, 50);
-C1_range = linspace(1, 100, 50);
+R1_range = linspace(0.001, 0.1, 1000);
+C1_range = linspace(1, 100, 1000);
 
 % 비용 함수 계산을 위한 배열 초기화
 cost_values = zeros(length(R1_range), length(C1_range));
