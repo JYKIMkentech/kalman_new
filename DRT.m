@@ -1,126 +1,143 @@
 clc; clear; close all;
 
-%% Synthetic Current 
-% Time vector
-t = 0:0.01:100;  % Time from 0 to 100 seconds with a step of 0.01
+%% Parameters
+n = 5;  % Number of RC elements used for voltage calculation
+m = 21;  % Number of discrete tau and R values for distribution (can be different from n)
+t = 0:0.01:100;  % Time vector (discrete time)
 
 % Synthetic current data (sum of sine waves)
 A = 1; 
-T1 = 1;        % Period for first sine wave
-T2 = 5;        % Period for second sine wave
-T3 = 20;       % Period for third sine wave
-
-% Current components (synthetic current data)
+T1 = 1;
+T2 = 5;
+T3 = 20;
 I1 = A * sin(2 * pi * t / T1);
 I2 = A * sin(2 * pi * t / T2);
 I3 = A * sin(2 * pi * t / T3);
 ik = I1 + I2 + I3;  % Total current
 
-%% Normal PDF 가정 (DRT에 사용)
-mu = 10;      % Mean of the distribution
-sigma = 5;    % Standard deviation of the distribution
+% Parameters for the normal distribution of tau
+mu = 10;
+sigma = 5;
+tau_discrete = linspace(0.01, 20, m);  % Discrete tau values for RC elements (m values)
 
-% Time constant (tau) range
-tau = 0.1:0.1:20;  % tau starts from 0.1 instead of 0
+% Use normpdf to directly calculate the R_discrete corresponding to tau_discrete
+R_discrete = normpdf(tau_discrete, mu, sigma);
 
-% Normal PDF
-pdf_tau = (1/(sigma * sqrt(2*pi))) * exp(-(tau - mu).^2 / (2 * sigma^2));
-pdf_tau = pdf_tau / max(pdf_tau);  % Normalize the PDF so max value is 1
+% Normalize R_discrete so that the maximum value is 1
+R_discrete = R_discrete / max(R_discrete);  % Now the maximum value of R_discrete is 1
 
-%% Discretize tau and corresponding R for 5-RC model
-num_RC = 100;  % Number of RC circuits
-tau_discrete = linspace(min(tau), max(tau), num_RC);  % Discrete tau values (starting > 0)
-
-% R_discrete follows the normal PDF distribution
-R_discrete = interp1(tau, pdf_tau, tau_discrete);  % Interpolate R values from the PDF
-
-%% Calculate V_est using the discrete RC model (with initial R_discrete)
-V_est = zeros(size(t));
-R0 = 0.1;  % Example internal resistance
+% Initialize voltage
+V_est = zeros(1, length(t));  % Estimated voltage
+R0 = 0.1;  % Internal resistance
 OCV = 0;   % Open circuit voltage
+V_RC = zeros(n, length(t));  % RC voltages for each RC element (n values)
 
-for i = 1:num_RC
-    V_est = V_est + ik .* R_discrete(i) .* (1 - exp(-t / tau_discrete(i)));
+%% Voltage calculation for each time step (using first n elements from tau_discrete and R_discrete)
+for k = 1:length(t)
+    if k < length(t)
+        dt = t(k+1) - t(k);  % Calculate dynamic time step for each time
+    else
+        dt = t(k) - t(k-1);  % For the last step, use the previous dt
+    end
+    
+    % Compute RC voltages for each of the n RC elements
+    for i = 1:n
+        if k == 1
+            % First time step, initial V_RC calculation
+            V_RC(i, k) = ik(k) * R_discrete(i) * (1 - exp(-dt / tau_discrete(i)));
+        else
+            % Subsequent time steps, accumulate V_RC
+            V_RC(i, k) = exp(-dt / tau_discrete(i)) * V_RC(i, k-1) + ...
+                         R_discrete(i) * (1 - exp(-dt / tau_discrete(i))) * ik(k);
+        end
+    end
+
+    % Final voltage summation: OCV + R0 * I + sum(V_RC for n RC elements)
+    V_est(k) = OCV + R0 * ik(k) + sum(V_RC(:, k));
 end
 
-V_est = OCV + ik .* R0 + V_est;
-V_est(1) = 0;  % Set initial voltage
-
 %% Add noise to the voltage
-noise_level = 0.1;  % 1% noise
+noise_level = 0.01;
 V_noisy = V_est + noise_level * randn(size(V_est));
 
-%% Define cost and residual functions (fitting only R, not tau)
+%% Initial guess for R (all ones for m elements)
+R_initial = ones(1, m);
 
-% Residual function: calculates the difference between V_noisy and V_est
-residual_fn = @(R_params) V_noisy - calculate_V_est(R_params, tau_discrete, t, ik, R0, OCV);
+%% Fit R using fmincon
+options = optimoptions('fmincon', 'Display', 'iter', 'Algorithm', 'sqp');
+R_fitted = fmincon(@(R_fit) cost_function(R_fit, tau_discrete, ik, V_noisy, t, R0, OCV, m), ...
+                   R_initial, [], [], [], [], zeros(1, m), [], [], options);
 
-% Cost function: sum of squared residuals with L2 regularization
-lambda = 0.1;  % Regularization parameter
-cost_fn = @(R_params) sum(residual_fn(R_params).^2) + lambda * sum(R_params.^2);
-
-%% fmincon setup (fitting only R)
-% Initial guess for R (fitting parameter)
-initial_guess_R = ones(1, num_RC);
-
-% Bounds for optimization (optional)
-lb = zeros(1, num_RC);  % Lower bound for R
-ub = ones(1, num_RC) * 10;  % Upper bound for R
-
-% Call fmincon for optimization (fitting only R, tau is fixed)
-options = optimoptions('fmincon', 'Display', 'iter', 'Algorithm', 'interior-point', 'TolFun', 1e-8, 'TolX', 1e-8);
-[estimated_R, fval] = fmincon(cost_fn, initial_guess_R, [], [], [], [], lb, ub, [], options);
-
-%% Plot the results with subplots (Current and Voltage)
+%% Plot the results: Current, Voltage, and DRT comparison
 figure;
 
 % Subplot for current
-subplot(2,1,1);  % 2 rows, 1 column, 1st subplot
+subplot(2, 1, 1);
 plot(t, ik, 'k-', 'LineWidth', 1.5);
 xlabel('Time (s)');
 ylabel('Current (A)');
-title('Current');
+title('Composite Current (Sum of Sine Waves)');
 grid on;
 
 % Subplot for voltage
-subplot(2,1,2);  % 2 rows, 1 column, 2nd subplot
+subplot(2, 1, 2);
 plot(t, V_noisy, 'r--', 'LineWidth', 1.5); hold on;
-plot(t, calculate_V_est(estimated_R, tau_discrete, t, ik, R0, OCV), 'b-', 'LineWidth', 1.5);
+V_fitted = V_noisy - residuals(R_fitted, tau_discrete, ik, V_noisy, t, R0, OCV, m);
+plot(t, V_fitted, 'b-', 'LineWidth', 1.5);
 xlabel('Time (s)');
 ylabel('Voltage (V)');
-legend('V_{noisy}', 'V_{estimated}');
-title('Noisy Voltage and Optimized Estimated Voltage (Fitting R only)');
+legend('Noisy Voltage', 'Fitted Voltage');
+title('Estimated and Fitted Voltages');
 grid on;
 
-%% Additional figure for (tau, R) comparison
+% Subplot for DRT comparison
 
-figure;
+figure(2);
+plot(tau_discrete, R_discrete, 'b-', 'LineWidth', 1.5);  % True DRT
+hold on;
+stem(tau_discrete, R_discrete, 'r', 'LineWidth', 1.5);  % Vertical lines for True DRT
+plot(tau_discrete, R_discrete, 'ro', 'LineWidth', 1.5);  % Points on the curve
 
-% Subplot 1: Initial Normal PDF-based tau and R
-subplot(2, 1, 1);
-scatter(tau_discrete, R_discrete, 100, 'filled');  % Initial (tau, R) from normal PDF
-xlabel('Time Constant (tau)');
-ylabel('Resistance (R)');
-title('Initial (tau, R) based on Normal PDF');
+plot(tau_discrete, R_fitted, 'g-', 'LineWidth', 1.5);  % Fitted DRT
+stem(tau_discrete, R_fitted, 'g', 'LineWidth', 1.5);  % Vertical lines for Fitted DRT
+plot(tau_discrete, R_fitted, 'go', 'LineWidth', 1.5);  % Points on the curve
+xlabel('\tau (Time Constant)');
+ylabel('R (Resistance)');
+legend('True DRT', 'Fitted DRT');
+title('True vs Fitted Distribution of Relaxation Times (DRT)');
 grid on;
 
-% Subplot 2: Fitted R with fixed tau
-subplot(2, 1, 2);
-scatter(tau_discrete, estimated_R, 100, 'filled');  % Fitted R with fixed tau
-xlabel('Time Constant (tau)');
-ylabel('Resistance (R)');
-title('Fitted (R) with Fixed (tau)');
-grid on;
+%% Function Definitions
+% Residuals function
+function res = residuals(R_fit, tau_discrete, ik, V_noisy, t, R0, OCV, m)
+    V_est_fit = zeros(1, length(t));
+    V_RC_fit = zeros(m, length(t));  % Use m values for fitting
 
-%% Helper function: Calculate V_est
-function V_est = calculate_V_est(R_params, tau_vals, t, ik, R0, OCV)
-    num_RC = length(R_params);
-    V_est = OCV + ik .* R0;  % Start with OCV and R0 contribution
-    
-    % Add RC elements' contributions with fixed tau
-    for i = 1:num_RC
-        V_est = V_est + ik .* R_params(i) .* (1 - exp(-t / tau_vals(i)));
+    for k = 1:length(t)
+        if k < length(t)
+            dt = t(k+1) - t(k);
+        else
+            dt = t(k) - t(k-1);
+        end
+
+        % Calculate RC voltages with fitted R for each of the m values
+        for i = 1:m
+            if k == 1
+                V_RC_fit(i, k) = ik(k) * R_fit(i) * (1 - exp(-dt / tau_discrete(i)));
+            else
+                V_RC_fit(i, k) = exp(-dt / tau_discrete(i)) * V_RC_fit(i, k-1) + ...
+                                 R_fit(i) * (1 - exp(-dt / tau_discrete(i))) * ik(k);
+            end
+        end
+        V_est_fit(k) = OCV + R0 * ik(k) + sum(V_RC_fit(:, k));
     end
+    % Calculate residuals (difference between noisy and estimated voltage)
+    res = V_noisy - V_est_fit;
 end
 
+% Cost function (sum of squared residuals)
+function cost = cost_function(R_fit, tau_discrete, ik, V_noisy, t, R0, OCV, m)
+    res = residuals(R_fit, tau_discrete, ik, V_noisy, t, R0, OCV, m);
+    cost = sum(res.^2);  % Sum of squared residuals
+end
 
