@@ -118,7 +118,7 @@ function [residuals, Vt_est] = voltage_error(params, initial_soc, current, volta
     Vt_est = zeros(num_samples, 1);   % 단자 전압 추정값
     residuals = zeros(num_samples, 1); % 잔차 벡터 초기화
 
-    SOC_est(1) = initial_soc;  % 초기 SOC 설정
+    SOC_est(1) = initial_soc;  % 초기 SOC 설whg정
     dt_1 = time_data(2) - time_data(1);  % 첫 번째 샘플의 시간 간격
     V1_est(1) = current(1) * R1 * (1 - exp(-dt_1 / (R1 * C1)));  % 초기 V1 추정
     Vt_est(1) = voltage(1);  % 초기 전압 설정
