@@ -1,7 +1,5 @@
-clc; clear; close all;
-
 %% Parameters
-n = 5;  % Number of RC elements used for voltage calculation
+n = 5;  % Number of RC elements used for voltage calculation (this remains as 5)
 m = 21;  % Number of discrete tau and R values for distribution (can be different from n)
 t = 0:0.01:100;  % Time vector (discrete time)
 
@@ -40,7 +38,7 @@ for k = 1:length(t)
         dt = t(k) - t(k-1);  % For the last step, use the previous dt
     end
     
-    % Compute RC voltages for each of the n RC elements
+    % Compute RC voltages for each of the n RC elements (use only the first n elements of tau_discrete)
     for i = 1:n
         if k == 1
             % First time step, initial V_RC calculation
@@ -60,71 +58,53 @@ end
 noise_level = 0.01;
 V_noisy = V_est + noise_level * randn(size(V_est));
 
-%% Initial guess for R (all ones for m elements)
-R_initial = ones(1, m);
-
-%% Fit R using fmincon
+%% Fitting: Ensure m elements for R_fitted
+R_initial = ones(1, m);  % Initial guess for R (m elements)
 options = optimoptions('fmincon', 'Display', 'iter', 'Algorithm', 'sqp');
-R_fitted = fmincon(@(R_fit) cost_function(R_fit, tau_discrete, ik, V_noisy, t, R0, OCV, m), ...
+
+R_fitted = fmincon(@(R_fit) cost_function(R_fit, tau_discrete, ik, V_noisy, t, R0, OCV, m, n), ...
                    R_initial, [], [], [], [], zeros(1, m), [], [], options);
 
-%% Plot the fitted results
+%% Plot the results: Current, Voltage, and DRT comparison
 figure;
+
+% Subplot for current
+subplot(2, 1, 1);
+plot(t, ik, 'k-', 'LineWidth', 1.5);
+xlabel('Time (s)');
+ylabel('Current (A)');
+title('Composite Current (Sum of Sine Waves)');
+grid on;
+
+% Subplot for voltage
+subplot(2, 1, 2);
 plot(t, V_noisy, 'r--', 'LineWidth', 1.5); hold on;
-V_fitted = V_noisy - residuals(R_fitted, tau_discrete, ik, V_noisy, t, R0, OCV, m);
+V_fitted = V_noisy - residuals(R_fitted, tau_discrete, ik, V_noisy, t, R0, OCV, m, n);
 plot(t, V_fitted, 'b-', 'LineWidth', 1.5);
 xlabel('Time (s)');
 ylabel('Voltage (V)');
 legend('Noisy Voltage', 'Fitted Voltage');
-title('Voltage Fitting using fmincon');
+title('Estimated and Fitted Voltages');
 grid on;
 
-%% Plot the DRT (True vs Fitted)
+% Subplot for DRT comparison
 figure(2);
-subplot(2, 1, 1);
 plot(tau_discrete, R_discrete, 'b-', 'LineWidth', 1.5);  % True DRT
 hold on;
 stem(tau_discrete, R_discrete, 'r', 'LineWidth', 1.5);  % Vertical lines for True DRT
 plot(tau_discrete, R_discrete, 'ro', 'LineWidth', 1.5);  % Points on the curve
-xlabel('\tau (Time Constant)');
-ylabel('R (Resistance)');
-title('True Distribution of Relaxation Times (True DRT)');
-grid on;
 
-subplot(2, 1, 2);
-plot(tau_discrete, R_fitted, 'b-', 'LineWidth', 1.5);  % Fitted DRT
-hold on;
+plot(tau_discrete, R_fitted, 'g-', 'LineWidth', 1.5);  % Fitted DRT
 stem(tau_discrete, R_fitted, 'g', 'LineWidth', 1.5);  % Vertical lines for Fitted DRT
 plot(tau_discrete, R_fitted, 'go', 'LineWidth', 1.5);  % Points on the curve
 xlabel('\tau (Time Constant)');
 ylabel('R (Resistance)');
-title('Fitted Distribution of Relaxation Times (Fitted DRT)');
-ylim([0 1]);
+legend('True DRT', 'Fitted DRT');
+title('True vs Fitted Distribution of Relaxation Times (DRT)');
 grid on;
 
-figure(3);
-
-% Subplot for current
-subplot(2,1,1);
-plot(t, ik, 'k-', 'LineWidth', 1.5);
-xlabel('Time (s)');
-ylabel('Current (A)');
-title('Current');
-grid on;
-
-% Subplot for voltage
-subplot(2,1,2);
-plot(t, V_est, 'b-', 'LineWidth', 1.5); hold on;
-plot(t, V_noisy, 'r--', 'LineWidth', 1.5);
-xlabel('Time (s)');
-ylabel('Voltage (V)');
-legend('V_{est}', 'V_{noisy}');
-title('Estimated Voltage and Noisy Voltage (n-RC System)');
-grid on;
-
-%% Function Definitions
-% Residuals function
-function res = residuals(R_fit, tau_discrete, ik, V_noisy, t, R0, OCV, m)
+%% Function Definitions (Update residuals function for fitting m elements)
+function res = residuals(R_fit, tau_discrete, ik, V_noisy, t, R0, OCV, m, n)
     V_est_fit = zeros(1, length(t));
     V_RC_fit = zeros(m, length(t));  % Use m values for fitting
 
@@ -137,11 +117,15 @@ function res = residuals(R_fit, tau_discrete, ik, V_noisy, t, R0, OCV, m)
 
         % Calculate RC voltages with fitted R for each of the m values
         for i = 1:m
-            if k == 1
-                V_RC_fit(i, k) = ik(k) * R_fit(i) * (1 - exp(-dt / tau_discrete(i)));
+            if i <= n  % Only calculate voltage for the first n RC elements
+                if k == 1
+                    V_RC_fit(i, k) = ik(k) * R_fit(i) * (1 - exp(-dt / tau_discrete(i)));
+                else
+                    V_RC_fit(i, k) = exp(-dt / tau_discrete(i)) * V_RC_fit(i, k-1) + ...
+                                     R_fit(i) * (1 - exp(-dt / tau_discrete(i))) * ik(k);
+                end
             else
-                V_RC_fit(i, k) = exp(-dt / tau_discrete(i)) * V_RC_fit(i, k-1) + ...
-                                 R_fit(i) * (1 - exp(-dt / tau_discrete(i))) * ik(k);
+                V_RC_fit(i, k) = 0;  % Ignore RC voltages for elements beyond n
             end
         end
         V_est_fit(k) = OCV + R0 * ik(k) + sum(V_RC_fit(:, k));
@@ -151,9 +135,8 @@ function res = residuals(R_fit, tau_discrete, ik, V_noisy, t, R0, OCV, m)
 end
 
 % Cost function (sum of squared residuals)
-function cost = cost_function(R_fit, tau_discrete, ik, V_noisy, t, R0, OCV, m)
-    res = residuals(R_fit, tau_discrete, ik, V_noisy, t, R0, OCV, m);
+function cost = cost_function(R_fit, tau_discrete, ik, V_noisy, t, R0, OCV, m, n)
+    res = residuals(R_fit, tau_discrete, ik, V_noisy, t, R0, OCV, m, n);
     cost = sum(res.^2);  % Sum of squared residuals
 end
-
 

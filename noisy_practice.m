@@ -3,7 +3,9 @@ clear;
 close all;
 
 % Load UDDS data
-load('C:\Users\deu04\OneDrive\바탕 화면\wykht8y7tg-1\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\Drive cycles\03-21-17_00.29 25degC_UDDS_Pan18650PF.mat');
+load('C:\Users\김준연\Desktop\wykht8y7tg-1\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\Drive cycles\03-21-17_00.29 25degC_UDDS_Pan18650PF.mat');
+
+% Load UDDS data
 udds_current = meas.Current; % UDDS 전류 데이터
 udds_voltage = meas.Voltage; % UDDS 전압 데이터
 udds_time = meas.Time; % UDDS 시간 데이터
@@ -78,29 +80,29 @@ end
 
 % 전류 데이터 비교 plot
 figure;
-plot(1:num_steps, true_current , 'b-', 'LineWidth', 2); % True current (mA)
+plot(1:num_steps, true_current * 1e3, 'b-', 'LineWidth', 2); % True current (mA)
 hold on;
-plot(1:num_steps, noisy_current_markov , 'r--', 'LineWidth', 2); % Noisy current (Markov)
-plot(1:num_steps, noisy_current_rand , 'g-.', 'LineWidth', 2); % Noisy current (Random)
+plot(1:num_steps, noisy_current_markov * 1e3, 'r--', 'LineWidth', 2); % Noisy current (Markov)
+plot(1:num_steps, noisy_current_rand * 1e3, 'g-.', 'LineWidth', 2); % Noisy current (Random)
 xlabel('Time Step');
-ylabel('Current (A)');
+ylabel('Current (mA)');
 title('True Current vs Noisy Current (Markov vs Random Noise)');
 legend('True Current', 'Noisy Current (Markov)', 'Noisy Current (Random)');
-xlim([221000 221010])
+%xlim([0 1000])
 grid on;
 hold off;
 
 % SOC 비교 plot
 figure;
-plot(1:num_steps, true_soc , 'b-', 'LineWidth', 2); % True SOC (%)
+plot(1:num_steps, true_soc * 100, 'b-', 'LineWidth', 2); % True SOC (%)
 hold on;
-plot(1:num_steps, noisy_soc_markov , 'r--', 'LineWidth', 2); % Noisy SOC (Markov)
-plot(1:num_steps, noisy_soc_rand , 'g-.', 'LineWidth', 2); % Noisy SOC (Random)
+plot(1:num_steps, noisy_soc_markov * 100, 'r--', 'LineWidth', 2); % Noisy SOC (Markov)
+plot(1:num_steps, noisy_soc_rand * 100, 'g-.', 'LineWidth', 2); % Noisy SOC (Random)
 xlabel('Time Step');
 ylabel('SOC (%)');
 title('True SOC vs Noisy SOC (Markov vs Random Noise)');
 legend('True SOC', 'Noisy SOC (Markov)', 'Noisy SOC (Random)');
-xlim([221000 222000])
+%xlim([0 1000])
 grid on;
 hold off;
 
