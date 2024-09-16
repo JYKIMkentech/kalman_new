@@ -2,6 +2,7 @@ clc; clear; close all;
 
 % Parameters
 n = 21;  % RC 요소의 개수
+%m = 21;  % 이산적인 tau와 R 값의 개수 (n과 다름)
 t = 0:0.01:100;  % 시간 벡터 (이산 시간)
 dt = t(2) - t(1);
 
@@ -18,7 +19,7 @@ ik = I1 + I2 + I3;  % 총 전류
 % tau에 대한 정규분포 파라미터
 mu = 10;
 sigma = 5;
-tau_discrete = linspace(0.01, 20, n);  % 이산적인 tau 값들 (n 값)
+tau_discrete = linspace(0.01, 20, n);  % 이산적인 tau 값들 (m 값)
 
 % tau_discrete에 해당하는 R_discrete을 normpdf로 계산
 R_discrete = normpdf(tau_discrete, mu, sigma);
@@ -52,7 +53,7 @@ noise_level = 0.01;
 V_noisy = V_est + noise_level * randn(size(V_est));
 
 %% Optimization using fmincon to find the best R values
-initial_R =  ones(1, n);%R_discrete;;  %R_discrete   % Initial guess for R_discrete
+initial_R = R_discrete;% ones(1, m)/2;  %R_discrete   % Initial guess for R_discrete
 lb = zeros(1, n);  % Lower bound (R cannot be negative)
 ub = [];%ones(1, m);   % Upper bound (normalize to 1)
 
@@ -71,24 +72,8 @@ stem(tau_discrete, R_optimized, 'ro', 'LineWidth', 1.5);  % Optimized DRT points
 
 xlabel('\tau (Time Constant)');
 ylabel('R (Resistance)');
-legend('True DRT','', 'Optimized DRT');
+legend('True DRT', 'Optimized DRT');
 title('True vs Optimized Distribution of Relaxation Times (DRT)');
-grid on;
-
-%% Plot the estimated voltage (V_est) and the synthetic current (ik)
-figure;
-subplot(2, 1, 1);
-plot(t, V_est, 'r-', 'LineWidth', 1.5);
-xlabel('Time (s)');
-ylabel('Estimated Voltage (V)');
-title('Estimated Voltage (V_{est})');
-grid on;
-
-subplot(2, 1, 2);
-plot(t, ik, 'b-', 'LineWidth', 1.5);
-xlabel('Time (s)');
-ylabel('Current (A)');
-title('Synthetic Current (i_k)');
 grid on;
 
 %% Functions
@@ -122,5 +107,6 @@ function cost = cost_function(R_discrete, tau_discrete, ik, V_noisy, dt, n, R0, 
     residuals = V_noisy - V_est;
     cost = sum(residuals.^2);
 end
+
 
 
