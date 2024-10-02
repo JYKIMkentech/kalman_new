@@ -7,10 +7,10 @@ dt = t(2) - t(1);
 
 % Synthetic current data (sum of sine waves)
 A1 = 1; 
-A2 = 5;    % 변경된 값
-A3 = 10;   % 변경된 값
-T1 = 2;
-T2 = 4;    % 변경된 값
+A2 = 1;    % 변경된 값
+A3 = 1;   % 변경된 값
+T1 = 1;
+T2 = 5;    % 변경된 값
 T3 = 20;   % 변경된 값
 I1 = A1 * sin(2 * pi * t / T1);  
 I2 = A2 * sin(2 * pi * t / T2);
