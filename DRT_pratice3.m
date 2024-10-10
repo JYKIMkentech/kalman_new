@@ -26,12 +26,10 @@ R_discrete_true = normpdf(tau_discrete, mu, sigma);
 R_discrete_true = R_discrete_true / max(R_discrete_true);  % Normalize to max value of 1
 
 %% Initialize arrays for storing results
-R_optimized_fmincon_all = zeros(num_scenarios, n);  % fmincon DRT estimates
-R_optimized_quad_all = zeros(num_scenarios, n);      % quadprog DRT estimates
-R_analytical_all = zeros(num_scenarios, n);         % Analytical DRT estimates
+R_analytical_all = zeros(num_scenarios, n);  % Analytical DRT estimates
 
 % Regularization parameter
-lambda = 0.1;  % 정규화 파라미터 설정
+lambda = 1;  % 정규화 파라미터 설정
 
 % Construct the first derivative matrix L for regularization
 L = zeros(n-1, n);
@@ -71,8 +69,7 @@ for s = 1:num_scenarios
     end
     
     %% Add noise to the voltage
-    rng(0);
-
+    rng(0);  % 시드를 0으로 설정하여 동일한 난수 생성
     noise_level = 0.01;
     V_noisy = V_est + noise_level * randn(size(V_est));
     
@@ -89,38 +86,11 @@ for s = 1:num_scenarios
         end
     end
     
-    %% Optimization using fmincon to find the best R values with regularization
-    initial_R = ones(n, 1);  % Initial guess for R_discrete (column vector)
-    lb = zeros(n,1);  % Lower bound (R cannot be negative)
-    ub = [];  % No upper bound
-    
-    % Optimization options for fmincon
-    options_fmincon = optimoptions('fmincon', 'Display', 'none', 'Algorithm', 'interior-point', 'MaxFunctionEvaluations', 1e5);
-    
-    % Define the cost function handle
-    cost_func = @(R) cost_function(R, tau_discrete, ik, V_noisy, dt, n, R0, OCV, t, lambda, L);
-    
-    % Perform optimization with fmincon
-    [R_optimized_fmincon, ~] = fmincon(cost_func, initial_R, [], [], [], [], lb, ub, [], options_fmincon);
-    
-    %% Quadratic Form Optimization using quadprog
-    % Quadratic form solution
-    H = (W' * W + lambda * (L' * L)); % Regularized Hessian matrix
-    f = -W' * V_noisy';  % Linear term for optimization
-    
-    % Quadratic optimization options
-    options_quadprog = optimoptions('quadprog','Display','none','Algorithm','interior-point-convex');
-    
-    % Perform quadratic optimization
-    R_optimized_quad = quadprog(H, f, [], [], [], [], lb, ub, [], options_quadprog);
-    
     %% Analytical solution using matrix method with regularization
     R_analytical = (W' * W + lambda * (L' * L)) \ (W' * V_noisy');
     R_analytical(R_analytical < 0) = 0;  % Enforce non-negativity
     
     %% Store the results
-    R_optimized_fmincon_all(s, :) = R_optimized_fmincon';
-    R_optimized_quad_all(s, :) = R_optimized_quad';
     R_analytical_all(s, :) = R_analytical';
     
     %% Plot Current and Voltage for the scenario as a subplot
@@ -154,12 +124,6 @@ for s = 1:num_scenarios
     % Plot True DRT
     plot(tau_discrete, R_discrete_true, 'k-', 'LineWidth', 1.5, 'DisplayName', 'True DRT');
     
-    % Plot fmincon Optimized DRT
-    plot(tau_discrete, R_optimized_fmincon_all(s, :), '-', 'Color', 'r', 'LineWidth', 1.5, 'DisplayName', 'fmincon DRT');
-    
-    % Plot quadprog Optimized DRT
-    plot(tau_discrete, R_optimized_quad_all(s, :), '--', 'Color', 'm', 'LineWidth', 1.5, 'DisplayName', 'quadprog DRT');
-    
     % Plot Analytical DRT
     plot(tau_discrete, R_analytical_all(s, :), ':', 'Color', 'g', 'LineWidth', 1.5, 'DisplayName', 'Analytical DRT');
     
@@ -167,7 +131,7 @@ for s = 1:num_scenarios
     xlabel('\tau (Time Constant)');
     ylabel('R (Resistance)');
     title(['DRT Comparison for Scenario ', num2str(s), ' (\lambda = ', num2str(lambda), ')']);
-    legend('True DRT', 'fmincon DRT', 'quadprog DRT', 'Analytical DRT', 'Location', 'BestOutside');
+    legend('True DRT', 'Analytical DRT', 'Location', 'BestOutside');
     grid on;
     
     % Optionally, save each DRT figure
@@ -196,24 +160,3 @@ function V_est = calculate_voltage(R_discrete, tau_discrete, ik, dt, n, R0, OCV,
         V_est(k_idx) = OCV + R0 * ik(k_idx) + sum(V_RC(:, k_idx));
     end
 end
-
-% Cost function for fmincon (sum of squared residuals with regularization)
-function cost = cost_function(R_discrete, tau_discrete, ik, V_noisy, dt, n, R0, OCV, t, lambda, L)
-    % Ensure R_discrete is a column vector
-    R_discrete = R_discrete(:);
-    
-    % Calculate the estimated voltage for the current R_discrete
-    V_est = calculate_voltage(R_discrete, tau_discrete, ik, dt, n, R0, OCV, t);
-    
-    % Compute the sum of squared differences (residuals)
-    residuals = V_noisy - V_est;
-    data_fidelity = sum(residuals.^2);
-    
-    % Regularization term (first derivative penalty)
-    regularization = lambda * norm(L * R_discrete, 2)^2;  % 수정: R_discrete' 제거
-    
-    % Total cost
-    cost = data_fidelity + regularization;
-end
-
-
