@@ -5,7 +5,7 @@ n = 21;  % Number of RC elements
 t = 0:0.01:100;  % Time vector
 dt = t(2) - t(1);
 num_scenarios = 10;  % Number of current scenarios
-lambda = 0.1;  % Regularization parameter
+lambda = 3.73;  % Regularization parameter
 
 % synthetic current parameters 
 Amp = linspace(1, 10, num_scenarios);  % Amplitude
