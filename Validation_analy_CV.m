@@ -1,157 +1,258 @@
 clc; clear; close all;
 
-%% parameters 
-n = 21;  % Number of RC elements
-t = 0:0.01:100;  % Time vector
-dt = t(2) - t(1);
-num_scenarios = 10;  % Number of current scenarios
-lambda = 3.73;  % Regularization parameter
+%% Parameters
+n = 21;                      % Number of RC elements
+t = linspace(0, 100, 1000);  % Time vector (0 to 100 seconds with 1000 points)
+dt = t(2) - t(1);            % Time step
+num_scenarios = 10;          % Total number of scenarios
+test_scenarios = [9, 10];    % Test scenarios
+validation_folds = {[1,2], [3,4], [5,6], [7,8]}; % 4 validation sets
+candidate_lambdas = logspace(-4, 4, 50); % Lambda candidates (1e-4 to 1e4)
 
-% synthetic current parameters 
-Amp = linspace(1, 10, num_scenarios);  % Amplitude
-T = [1, 2, 5, 10, 20, 25, 30, 35, 40, 50];  % Period
-ik_scenarios = zeros(num_scenarios, length(t));  
-
-% True DRT parameters (R_discrete)
-mu = 10;
-sigma = 5;
-tau_discrete = linspace(0.01, 20, n);  % Discrete tau values
-
-% 1차 미분 L 행렬
+%% Regularization Matrix L (First-order difference)
 L = zeros(n-1, n);
 for i = 1:n-1
     L(i, i) = -1;
     L(i, i+1) = 1;
 end
 
-%% DRT 
-
-% True DRT [Tau,R]
+%% True DRT Parameters [Tau, R]
+mu = 10;
+sigma = 5;
+tau_discrete = linspace(0.01, 20, n); % Discrete tau values
 R_discrete_true = normpdf(tau_discrete, mu, sigma);
-R_discrete_true = R_discrete_true / max(R_discrete_true);  % Normalize to max value of 1
+R_discrete_true = R_discrete_true / max(R_discrete_true); % Normalize to max value of 1
 
-% DRT 저항 초기값 [Tau,R]
-R_analytical_all = zeros(num_scenarios, n);  % Analytical DRT estimates
+%% Initialize Storage Variables
+W_all = cell(num_scenarios, 1);      % Store W matrices for all scenarios
+V_sd_all = cell(num_scenarios, 1);   % Store noisy V data for all scenarios
 
-% 전압 저장 변수 (10개 시나리오 각각의 V_est, V_sd)
-V_est_all = zeros(num_scenarios, length(t));  % For storing V_est for all scenarios
-V_sd_all = zeros(num_scenarios, length(t));   % For storing V_sd for all scenarios
+%% Define Amplitudes and Periods for Current Synthesis
+A = [1, 1, 1;          % Scenario 1
+     1.7, 0.6, 0.7;    % Scenario 2
+     0.2, 0.5, 2.3;    % Scenario 3
+     1.3, 1.1, 0.6;    % Scenario 4
+     1.7, 1.8, 0.5;    % Scenario 5
+     1.27, 1.33, 0.4;  % Scenario 6
+     1.2, 1.6, 0.2;    % Scenario 7
+     0.9, 0.7, 2.4;    % Scenario 8
+     1.1, 1.1, 0.8;    % Scenario 9
+     0.1, 0.1, 2.8];   % Scenario 10
 
-%% 전류 합성
+T = [1, 5, 20;         % Scenario 1
+     2, 4, 20;         % Scenario 2
+     1, 20, 25;        % Scenario 3
+     1.5, 5.3, 19.8;   % Scenario 4
+     2.5, 4.2, 20.5;   % Scenario 5
+     1.5, 20.9, 24.2;  % Scenario 6
+     1.3, 6, 19.3;     % Scenario 7
+     2.2, 4.8, 20.2;   % Scenario 8
+     2, 20.8, 26.1;    % Scenario 9
+     1.1, 4.3, 20.1];  % Scenario 10
 
-% 10개 전류 시나리오
-for k = 1:num_scenarios
-    ik_scenarios(k, :) = Amp(k) * sin(2 * pi * t / T(k));
+%% Generate Synthetic Current Data (Multi-Sine Approach)
+ik_scenarios = zeros(num_scenarios, length(t)); % Initialize current scenarios
+
+for s = 1:num_scenarios
+    % Sum of three sine waves for each scenario
+    ik_scenarios(s, :) = A(s,1)*sin(2*pi*t / T(s,1)) + ...
+                         A(s,2)*sin(2*pi*t / T(s,2)) + ...
+                         A(s,3)*sin(2*pi*t / T(s,3));
 end
 
-%% 전압 합성
-figure(1);  
-% 매 시나리오마다 전류, 전압 합성 반복
+%% Plot Synthesized Currents
+figure;
+for scenario = 1:num_scenarios
+    subplot(5, 2, scenario);
+    plot(t, ik_scenarios(scenario, :), 'LineWidth', 1.5);
+    title(sprintf('Scenario %d: A1=%.2f, A2=%.2f, A3=%.2f, T1=%.1f, T2=%.1f, T3=%.1f', ...
+                  scenario, A(scenario,1), A(scenario,2), A(scenario,3), ...
+                  T(scenario,1), T(scenario,2), T(scenario,3)));
+    xlabel('Time (s)');
+    ylabel('Current (A)');
+    grid on;
+end
+sgtitle('Synthesized Current for Each Scenario');
+
+%% Generate Voltage Data for Each Scenario
+V_est_all = zeros(num_scenarios, length(t)); % Store estimated V
+rng(0); % For reproducibility
+noise_level = 0.01; % Noise level
+
 for s = 1:num_scenarios
-    fprintf('Processing Scenario %d/%d...\n', s, num_scenarios);
+    fprintf('Generating data for Scenario %d/%d...\n', s, num_scenarios);
     
-    % Current for the scenario
-    ik = ik_scenarios(s, :);  % 전류 시나리오 입력
+    ik = ik_scenarios(s, :); % Current for scenario s
     
-    %% Initialize voltage
-    V_est = zeros(1, length(t));  % n-RC model을 통해 계산된 model voltage
-    R0 = 0.1;  % Ohmic resistance
-    OCV = 0;   % OCV
-    V_RC = zeros(n, length(t));  % RC voltages for each element
+    %% Initialize Voltage
+    V_est = zeros(1, length(t)); % Estimated voltage
+    R0 = 0.1; % Ohmic resistance
+    OCV = 0;  % Open Circuit Voltage
+    V_RC = zeros(n, length(t)); % RC voltages for each element
     
-    %% 초기 전압 계산  (first time step)
+    %% Initial Voltage Calculation (k=1)
     for i = 1:n
         V_RC(i, 1) = ik(1) * R_discrete_true(i) * (1 - exp(-dt / tau_discrete(i)));
     end
     V_est(1) = OCV + R0 * ik(1) + sum(V_RC(:, 1));
     
-    %% time > 1 이후부터 전압 계산 
-    % 계산된 V_est = OCV  + IR0 + V_RC
-
+    %% Voltage Calculation for t > 1
     for k_idx = 2:length(t)
         for i = 1:n
-            % 전 step 시간 데이터로 RC 전압 계산
             V_RC(i, k_idx) = exp(-dt / tau_discrete(i)) * V_RC(i, k_idx-1) + ...
-                             R_discrete_true(i) * (1 - exp(-dt / tau_discrete(i))) * ik(k_idx);       
+                              R_discrete_true(i) * (1 - exp(-dt / tau_discrete(i))) * ik(k_idx);
         end
         V_est(k_idx) = OCV + R0 * ik(k_idx) + sum(V_RC(:, k_idx));
     end
     
-    % Store V_est for the current scenario
-    V_est_all(s, :) = V_est;  % Save the calculated V_est for this scenario
+    % Store V_est and add noise
+    V_est_all(s, :) = V_est;
+    V_sd = V_est + noise_level * randn(size(V_est));
+    V_sd_all{s} = V_sd;
     
-    %% Add noise to the voltage
-    rng(0);  % 노이즈 일정하게 추가
-    noise_level = 0.01;
-    V_sd = V_est + noise_level * randn(size(V_est));  % Vsd = synthethic data voltage = 측정 전압 (such as UDDS)
-    
-    % Store V_sd for the current scenario
-    V_sd_all(s, :) = V_sd;  % Save the noisy V_sd for this scenario
-    
-    %% COST = (측정 전압 - 모델 전압 ) ^2 + penalty 
-    % cost f(R) = (Vsd - Vest)^2 + lambda * ( LR ) ^2 = (Vsd - W * R )^2 + lambda * ( LR ) ^2 
-    
-    W = zeros(length(t), n);  % Initialize W matrix
+    %% Construct W Matrix for Scenario s
+    W = zeros(length(t), n); % Initialize W matrix
     for k_idx = 1:length(t)
         for i = 1:n
-            if k_idx == 1  % 1초일때 행렬 
+            if k_idx == 1
                 W(k_idx, i) = ik(k_idx) * (1 - exp(-dt / tau_discrete(i)));
-            else  % 1초 이상일때 W 행렬
+            else
                 W(k_idx, i) = exp(-dt / tau_discrete(i)) * W(k_idx-1, i) + ...
                               ik(k_idx) * (1 - exp(-dt / tau_discrete(i)));
             end
         end
     end
-    
-    %% 정규화을 통한 Analytical solution 
-
-    R_analytical = (W' * W + lambda * (L' * L)) \ (W' * V_sd'); 
-    R_analytical(R_analytical < 0) = 0;  % Enforce non-negativity
-    
-    %% 결과값 저장
-    R_analytical_all(s, :) = R_analytical';
-    
-    %% 전류 전압 subplot 그래프
-
-    figure(1);
-    sgtitle('Current and Voltage for Each Scenario');
-
-    subplot(5, 2, s);
-    yyaxis left
-    plot(t, ik, 'b-', 'LineWidth', 1.5);
-    ylabel('Current (A)');
-    ylim([min(ik)-1, max(ik)+1]);
-    
-    yyaxis right
-    plot(t, V_sd, 'r-', 'LineWidth', 1.5);
-    ylabel('Voltage (V)');
-    ylim([min(V_sd)-0.1, max(V_sd)+0.1]);
-    
-    title(['Scenario ', num2str(s), ': A=', num2str(Amp(s)), ', T=', num2str(T(s))]);
-    xlabel('Time (s)');
-    grid on;
+    W_all{s} = W; % Store W matrix
 end
 
-%% Plot the DRT comparison for each scenario in separate figures
-for s = 1:num_scenarios
-    figure(1 + s);  % DRT Comparison Figure for each scenario
-    hold on;
+%% Cross-Validation to Optimize Lambda
+CVE = zeros(length(candidate_lambdas),1); % Initialize CVE for each lambda
+
+for l = 1:length(candidate_lambdas)
+    lambda = candidate_lambdas(l);
+    total_error = 0; % Initialize total CVE
     
-    % Plot True DRT
-    plot(tau_discrete, R_discrete_true, 'k-', 'LineWidth', 1.5, 'DisplayName', 'True DRT');
+    for fold = 1:length(validation_folds)
+        val_set = validation_folds{fold}; % Current validation set
+        
+        % Define training set: exclude test and current validation set
+        train_set = setdiff(1:num_scenarios, [test_scenarios, val_set]);
+        
+        % Stack W_train and V_train from training set
+        sum_WtW = zeros(n, n);   % Initialize sum(W_s^T * W_s)
+        sum_WtV = zeros(n, 1);   % Initialize sum(W_s^T * V_s)
+        
+        for s = train_set
+            W_s = W_all{s};
+            V_s = V_sd_all{s};
+            sum_WtW = sum_WtW + W_s' * W_s;
+            sum_WtV = sum_WtV + W_s' * V_s';
+        end
+        
+        %% Analytical Solution for R_train
+        R_train = (sum_WtW + lambda * (L' * L)) \ sum_WtV;
+        R_train(R_train < 0) = 0; % Enforce non-negativity
+        
+        %% Validation Error Calculation
+        for s_val = val_set
+            W_val = W_all{s_val};
+            V_val = V_sd_all{s_val};
+            
+            % Predict V_pred for validation set
+            V_pred = W_val * R_train;
+            
+            % Compute squared voltage error
+            error = sum((V_val' - V_pred).^2);
+            total_error = total_error + error;
+        end
+    end
     
-    % Plot Analytical DRT
-    plot(tau_discrete, R_analytical_all(s, :), ':', 'Color', 'g', 'LineWidth', 1.5, 'DisplayName', 'Analytical DRT');
-    
-    hold off;
-    xlabel('\tau (Time Constant)');
-    ylabel('R (Resistance)');
-    title(['DRT Comparison for Scenario ', num2str(s), ' (\lambda = ', num2str(lambda), ')']);
-    legend('True DRT', 'Analytical DRT', 'Location', 'BestOutside');
-    grid on;
+    % Store CVE for current lambda
+    CVE(l) = total_error;
 end
 
+%% Find Optimal Lambda
+[~, optimal_idx] = min(CVE);
+optimal_lambda = candidate_lambdas(optimal_idx);
+fprintf('Optimal lambda: %e\n', optimal_lambda);
 
+%% Plot CVE vs Lambda with Aggressive Y-axis Zoom and Logarithmic Scaling
+figure;
+semilogx(candidate_lambdas, CVE, 'b-', 'LineWidth', 1.5); % CVE vs Lambda plot
+hold on;
+
+% Plot optimal lambda point
+semilogx(optimal_lambda, CVE(optimal_idx), 'ro', 'MarkerSize', 10, 'LineWidth', 2); % Optimal lambda point
+
+% Add text to indicate the optimal lambda inside the legend
+optimal_lambda_str = ['Optimal \lambda = ', num2str(optimal_lambda, '%.2e')]; % Text string for optimal lambda
+
+% Labels and title
+xlabel('\lambda');
+ylabel('Crossvalidation Error (CVE)');
+title('CVE vs \lambda');
+
+% Grid and legend
+grid on;
+
+% Set Y-axis to logarithmic scale
+set(gca, 'YScale', 'log');  % Set Y-axis to log scale
+
+% Aggressive Y-axis zoom: narrow range to focus on the lower part
+ylim([0.7897, 0.7904]);  % Adjust to focus on the lowest part of the CVE curve
+
+% Add legend and include optimal lambda in the legend
+legend({'CVE', optimal_lambda_str}, 'Location', 'Best');
+
+hold off;
+
+
+%% Retrain on All Training Data with Optimal Lambda
+% Training set: exclude test scenarios (9 and 10)
+train_set_final = setdiff(1:num_scenarios, test_scenarios);
+sum_WtW_final = zeros(n, n);   % Initialize sum(W_s^T * W_s)
+sum_WtV_final = zeros(n, 1);   % Initialize sum(W_s^T * V_s)
+
+for s = train_set_final
+    W_s = W_all{s};
+    V_s = V_sd_all{s};
+    sum_WtW_final = sum_WtW_final + W_s' * W_s;
+    sum_WtV_final = sum_WtV_final + W_s' * V_s';
+end
+
+% Compute R_final using optimal lambda
+R_final = (sum_WtW_final + optimal_lambda * (L' * L)) \ sum_WtV_final;
+R_final(R_final < 0) = 0; % Enforce non-negativity
+
+%% Test on Test Scenarios (9 and 10)
+test_set = test_scenarios;
+total_test_error = 0;
+
+for s_test = test_set
+    W_test = W_all{s_test};
+    V_test = V_sd_all{s_test};
+    
+    % Predict V_pred_test
+    V_pred_test = W_test * R_final;
+    
+    % Compute squared voltage error
+    error_test = sum((V_test' - V_pred_test).^2);
+    total_test_error = total_test_error + error_test;
+end
+
+fprintf('Total squared voltage error on test data: %f\n', total_test_error);
+
+%% Plot DRT Comparison: True vs Optimized R
+figure;
+plot(tau_discrete, R_discrete_true, 'k-', 'LineWidth', 2, 'DisplayName', 'True DRT');
+hold on;
+plot(tau_discrete, R_final, 'r--', 'LineWidth', 2, 'DisplayName', 'Optimized DRT');
+xlabel('\tau (Time Constant)');
+ylabel('R (Resistance)');
+title('Comparison of True DRT and Optimized DRT');
+legend('Location', 'Best');
+grid on;
+hold off;
 
 
 
