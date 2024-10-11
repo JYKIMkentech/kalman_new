@@ -1,7 +1,7 @@
 clear; clc; close all;
 
 % 데이터 로드
-load('C:\Users\USER\Desktop\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\Drive cycles\03-21-17_00.29 25degC_UDDS_Pan18650PF.mat');
+load('C:\Users\deu04\OneDrive\바탕 화면\wykht8y7tg-1\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\Drive cycles\03-21-17_00.29 25degC_UDDS_Pan18650PF.mat');
 udds_current = meas.Current;  % 전류 데이터
 udds_voltage = meas.Voltage;  % 전압 데이터
 udds_time = meas.Time;        % 시간 데이터
