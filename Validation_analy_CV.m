@@ -123,6 +123,8 @@ for s = 1:num_scenarios
         end
     end
     W_all{s} = W; % Store W matrix
+
+    
 end
 
 %% Cross-Validation to Optimize Lambda
