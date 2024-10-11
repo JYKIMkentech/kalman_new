@@ -1,7 +1,6 @@
 clc; clear; close all;
 
 %% parameters 
-
 n = 21;  % Number of RC elements
 t = 0:0.01:100;  % Time vector
 dt = t(2) - t(1);
@@ -9,7 +8,6 @@ num_scenarios = 10;  % Number of current scenarios
 lambda = 0.1;  % Regularization parameter
 
 % synthetic current parameters 
-
 Amp = linspace(1, 10, num_scenarios);  % Amplitude
 T = [1, 2, 5, 10, 20, 25, 30, 35, 40, 50];  % Period
 ik_scenarios = zeros(num_scenarios, length(t));  
@@ -32,8 +30,12 @@ end
 R_discrete_true = normpdf(tau_discrete, mu, sigma);
 R_discrete_true = R_discrete_true / max(R_discrete_true);  % Normalize to max value of 1
 
-% DRT 저항 초기값값 [Tau,R]
+% DRT 저항 초기값 [Tau,R]
 R_analytical_all = zeros(num_scenarios, n);  % Analytical DRT estimates
+
+% 전압 저장 변수 (10개 시나리오 각각의 V_est, V_sd)
+V_est_all = zeros(num_scenarios, length(t));  % For storing V_est for all scenarios
+V_sd_all = zeros(num_scenarios, length(t));   % For storing V_sd for all scenarios
 
 %% 전류 합성
 
@@ -42,15 +44,14 @@ for k = 1:num_scenarios
     ik_scenarios(k, :) = Amp(k) * sin(2 * pi * t / T(k));
 end
 
-
 %% 전압 합성
 figure(1);  
-% 매 시나리오마다 전류,전압 합성 반복
+% 매 시나리오마다 전류, 전압 합성 반복
 for s = 1:num_scenarios
     fprintf('Processing Scenario %d/%d...\n', s, num_scenarios);
     
     % Current for the scenario
-    ik = ik_scenarios(s, :); % 전류 시나리오 입력
+    ik = ik_scenarios(s, :);  % 전류 시나리오 입력
     
     %% Initialize voltage
     V_est = zeros(1, length(t));  % n-RC model을 통해 계산된 model voltage
@@ -69,17 +70,23 @@ for s = 1:num_scenarios
 
     for k_idx = 2:length(t)
         for i = 1:n
-            % Calculate RC voltages based on previous time step
+            % 전 step 시간 데이터로 RC 전압 계산
             V_RC(i, k_idx) = exp(-dt / tau_discrete(i)) * V_RC(i, k_idx-1) + ...
                              R_discrete_true(i) * (1 - exp(-dt / tau_discrete(i))) * ik(k_idx);       
         end
         V_est(k_idx) = OCV + R0 * ik(k_idx) + sum(V_RC(:, k_idx));
     end
     
+    % Store V_est for the current scenario
+    V_est_all(s, :) = V_est;  % Save the calculated V_est for this scenario
+    
     %% Add noise to the voltage
     rng(0);  % 노이즈 일정하게 추가
-    noise_level = 0.01; %
-    V_sd = V_est + noise_level * randn(size(V_est)); % Vsd = synthethic data voltage = 측정 전압 (such as UDDS) 
+    noise_level = 0.01;
+    V_sd = V_est + noise_level * randn(size(V_est));  % Vsd = synthethic data voltage = 측정 전압 (such as UDDS)
+    
+    % Store V_sd for the current scenario
+    V_sd_all(s, :) = V_sd;  % Save the noisy V_sd for this scenario
     
     %% COST = (측정 전압 - 모델 전압 ) ^2 + penalty 
     % cost f(R) = (Vsd - Vest)^2 + lambda * ( LR ) ^2 = (Vsd - W * R )^2 + lambda * ( LR ) ^2 
@@ -87,9 +94,9 @@ for s = 1:num_scenarios
     W = zeros(length(t), n);  % Initialize W matrix
     for k_idx = 1:length(t)
         for i = 1:n
-            if k_idx == 1 % 1초일때 행렬 
+            if k_idx == 1  % 1초일때 행렬 
                 W(k_idx, i) = ik(k_idx) * (1 - exp(-dt / tau_discrete(i)));
-            else % 1초 이상일때 W 행렬
+            else  % 1초 이상일때 W 행렬
                 W(k_idx, i) = exp(-dt / tau_discrete(i)) * W(k_idx-1, i) + ...
                               ik(k_idx) * (1 - exp(-dt / tau_discrete(i)));
             end
@@ -105,6 +112,10 @@ for s = 1:num_scenarios
     R_analytical_all(s, :) = R_analytical';
     
     %% 전류 전압 subplot 그래프
+
+    figure(1);
+    sgtitle('Current and Voltage for Each Scenario');
+
     subplot(5, 2, s);
     yyaxis left
     plot(t, ik, 'b-', 'LineWidth', 1.5);
@@ -121,13 +132,9 @@ for s = 1:num_scenarios
     grid on;
 end
 
-%% Enhance the Current and Voltage Figure
-figure(1);
-sgtitle('Current and Voltage for Each Scenario');
-
 %% Plot the DRT comparison for each scenario in separate figures
 for s = 1:num_scenarios
-    figure(2 + s);  % DRT Comparison Figure for each scenario
+    figure(1 + s);  % DRT Comparison Figure for each scenario
     hold on;
     
     % Plot True DRT
@@ -143,34 +150,6 @@ for s = 1:num_scenarios
     legend('True DRT', 'Analytical DRT', 'Location', 'BestOutside');
     grid on;
 end
-
-%% Functions
-
-% % Residuals function for calculating V_est with given R_discrete
-% function V_est = calculate_voltage(R_discrete, tau_discrete, ik, dt, n, R0, OCV, t)
-%     V_est = zeros(1, length(t));  % Initialize estimated voltage
-%     V_RC = zeros(n, length(t));  % RC voltages for each element
-% 
-%     % Initial voltage calculation (first time step)
-%     for i = 1:n
-%         V_RC(i, 1) = ik(1) * R_discrete(i) * (1 - exp(-dt / tau_discrete(i)));
-%     end
-%     V_est(1) = OCV + R0 * ik(1) + sum(V_RC(:, 1));
-% 
-%     % Discrete-time voltage calculation for subsequent time steps
-%     for k_idx = 2:length(t)
-%         for i = 1:n
-%             V_RC(i, k_idx) = exp(-dt / tau_discrete(i)) * V_RC(i, k_idx-1) + ...
-%                              R_discrete(i) * (1 - exp(-dt / tau_discrete(i))) * ik(k_idx);
-%         end
-%         V_est(k_idx) = OCV + R0 * ik(k_idx) + sum(V_RC(:, k_idx));
-%     end
-% end
-
-
-
-
-
 
 
 
