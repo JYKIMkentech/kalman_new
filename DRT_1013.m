@@ -1,11 +1,11 @@
 clc; clear; close all;
 
 %% 1. Parameters
-n = 21;  % Number of RC elements
-t = 0:0.01:100;  % Time vector (seconds)
-dt = t(2) - t(1);  % Time step size
-num_scenarios = 10;  % Number of current scenarios
-lambda = 0.0409;  % Regularization parameter
+n = 21;                    % Number of RC elements
+t = 0:0.01:100;            % Time vector (seconds)
+dt = t(2) - t(1);          % Time step size
+num_scenarios = 10;        % Number of current scenarios
+lambda = 0.0409;           % Regularization parameter
 
 %% 2. Define Amplitudes and Periods for Current Synthesis
 A = [1, 1, 1;          % Scenario 1   
@@ -40,43 +40,33 @@ for s = 1:num_scenarios
                          A(s,3)*sin(2*pi*t / T(s,3));
 end
 
-%% 4. True DRT Parameters (R_discrete)
-mu = 10;
-sigma = 5;
-tau_discrete_linear = linspace(0.01, 20, n);  % Original linear tau values
-
-% Normalize R_discrete_true to have a maximum value of 1
-R_discrete_true_linear = normpdf(tau_discrete_linear, mu, sigma);
-R_discrete_true_linear = R_discrete_true_linear / max(R_discrete_true_linear);
-
-%% 5. DRT Using Logarithmic Time Scale (Natural Log)
-% Define tau_j on a logarithmic scale using natural logarithms
+%% 4. Define Time Constants on Logarithmic Scale (Natural Log)
 a = 0.01;        % Minimum tau
-b = 20;          % Maximum tau
+b = 100;          % Maximum tau
 theta_j = linspace(log(a), log(b), n); % Linearly spaced in log domain
 tau_discrete_log = exp(theta_j);         % Exponentiate to get tau_j
 
-% True DRT for log scale (assuming the same R_discrete_true)
-R_discrete_true_log = normpdf(tau_discrete_log, mu, sigma);
-R_discrete_true_log = R_discrete_true_log / max(R_discrete_true_log);  % Normalize
+%% 5. True DRT Parameters (R_discrete_true)
+mu = 10;         % Mean of the true DRT distribution
+sigma = 5;       % Standard deviation of the true DRT distribution
 
-% Define Regularization Matrix L (1st order difference)
+% True Resistance Vector based on a Gaussian distribution over log-scale tau
+R_discrete_true_log = normpdf(tau_discrete_log, mu, sigma);
+R_discrete_true_log = R_discrete_true_log / max(R_discrete_true_log);  % Normalize to max value of 1
+
+%% 6. Define Regularization Matrix L (1st Order Difference)
 L = zeros(n-1, n);
 for i = 1:n-1
     L(i, i) = -1;
     L(i, i+1) = 1;
 end
 
-%% 6. DRT Estimation for Each Scenario Using Logarithmic Time Scale
-R_estimated_analytic = zeros(num_scenarios, n);   % Analytical estimates
-R_estimated_quadprog = zeros(num_scenarios, n);  % Quadprog estimates
-R_estimated_fmincon = zeros(num_scenarios, n);   % Fmincon estimates
+%% 7. Initialize Storage for Results
+R_estimated_analytic = zeros(num_scenarios, n);   % Analytical DRT estimates
+V_est_all = zeros(num_scenarios, length(t));      % Estimated voltages for all scenarios
+V_sd_all = zeros(num_scenarios, length(t));       % Synthetic measured voltages for all scenarios
 
-% Initialize storage for V_est and V_sd
-V_est_all = zeros(num_scenarios, length(t));  % Estimated voltages
-V_sd_all = zeros(num_scenarios, length(t));   % Synthetic measured voltages
-
-%% 7. Voltage Synthesis and Plotting Setup
+%% 8. Voltage Synthesis and Plotting Setup
 figure(1);  
 sgtitle('Current and Voltage for Each Scenario');
 
@@ -90,26 +80,26 @@ for s = 1:num_scenarios
     grid on;
 end
 
-%% 8. Processing Each Scenario
+%% 9. Processing Each Scenario (Logarithmic Time Scale & Analytical Solution)
 for s = 1:num_scenarios
     fprintf('Processing Scenario %d/%d...\n', s, num_scenarios);
     
-    % Current for the scenario
-    ik = ik_scenarios(s, :);  % Current scenario input
+    % Current for the scenario (m x 1)
+    ik = ik_scenarios(s, :)';  % Transpose to column vector (m x 1)
     
-    %% 8.1. Initialize Voltage
-    V_est = zeros(1, length(t));  % Model voltage calculated via n-RC model
-    R0 = 0.1;  % Ohmic resistance (Ohms)
-    OCV = 3.7; % Open Circuit Voltage (V)
-    V_RC = zeros(n, length(t));  % RC voltages for each element
+    %% 9.1. Initialize Voltage
+    V_est = zeros(length(t),1);      % Estimated voltage via n-RC model (m x 1)
+    R0 = 0.1;                         % Ohmic resistance (Ohms)
+    OCV = 3.7;                        % Open Circuit Voltage (V)
+    V_RC = zeros(n, length(t));       % RC voltages for each element (n x m)
     
-    %% 8.2. Initial Voltage Calculation (first time step)
+    %% 9.2. Initial Voltage Calculation (First Time Step)
     for i = 1:n
         V_RC(i, 1) = ik(1) * R_discrete_true_log(i) * (1 - exp(-dt / tau_discrete_log(i)));
     end
     V_est(1) = OCV + R0 * ik(1) + sum(V_RC(:, 1));
     
-    %% 8.3. Voltage Calculation for t > 1
+    %% 9.3. Voltage Calculation for t > 1
     for k_idx = 2:length(t)
         for i = 1:n
             % Calculate RC voltage using previous time step data
@@ -120,92 +110,46 @@ for s = 1:num_scenarios
     end
     
     % Store V_est for the current scenario
-    V_est_all(s, :) = V_est;  % Save the calculated V_est for this scenario
+    V_est_all(s, :) = V_est';  % Store as row vector (1 x m)
     
-    %% 8.4. Add Noise to the Voltage
+    %% 9.4. Add Noise to the Voltage
     rng(s);  % Ensure reproducibility of noise for each scenario
     noise_level = 0.01;
-    V_sd = V_est + noise_level * randn(size(V_est));  % V_sd = synthetic measured voltage
+    V_sd = V_est + noise_level * randn(size(V_est));  % V_sd = synthetic measured voltage (m x 1)
     
     % Store V_sd for the current scenario
-    V_sd_all(s, :) = V_sd;  % Save the noisy V_sd for this scenario
+    V_sd_all(s, :) = V_sd';  % Store as row vector (1 x m)
     
-    %% 8.5. Construct W Matrix for Log Scale
-    W = zeros(length(t), n);  % Initialize W matrix
-    V_RC = zeros(n, length(t));  % Reset V_RC for calculation
-    
+    %% 9.5. Construct System Matrix W for Logarithmic Time Scale
+    W = zeros(length(t), n);  % Initialize W matrix (m x n)
     for j = 1:n
         for k_idx = 1:length(t)
             if k_idx == 1
-                W(k_idx, j) = ik(k_idx) * (1 - exp(-dt / tau_discrete_log(j)));
+                W(k_idx,j) = ik(k_idx) * (1 - exp(-dt / tau_discrete_log(j)));
             else
-                W(k_idx, j) = exp(-dt / tau_discrete_log(j)) * W(k_idx-1, j) + ...
-                              ik(k_idx) * (1 - exp(-dt / tau_discrete_log(j)));
+                W(k_idx,j) = exp(-dt / tau_discrete_log(j)) * W(k_idx-1,j) + ...
+                            ik(k_idx) * (1 - exp(-dt / tau_discrete_log(j)));
             end
         end
     end
     
-    %% 8.6. Analytical Solution with Regularization
+    %% 9.6. Analytical Solution with Regularization
     % Compute (W^T W + lambda * L^T L)
-    A_matrix = W' * W + lambda * (L' * L);
+    A_matrix = W' * W + lambda * (L' * L);  % (n x n)
     
     % Compute W^T (V_sd - OCV - I * R0)
-    b_vector = W' * (V_sd - OCV - ik * R0)';
+    b_vector = W' * (V_sd - OCV - ik * R0);  % (n x 1)
     
     % Solve for R using the analytical solution
-    R_analytic = A_matrix \ b_vector;
+    R_analytic = A_matrix \ b_vector;         % (n x 1)
     
     % Enforce non-negativity
     R_analytic(R_analytic < 0) = 0;
     
     % Store Analytical DRT
-    R_estimated_analytic(s, :) = R_analytic';
+    R_estimated_analytic(s, :) = R_analytic';  % Store as row vector (1 x n)
     
-    %% 8.7. Quadratic Programming Solution
-    H_qp = 2 * (W' * W + lambda * (L' * L));
-    f_qp = -2 * W' * (V_sd - OCV - ik * R0)';
-    
-    % No equality constraints, only inequality (R >= 0)
-    A_qp = [];
-    b_qp = [];
-    Aeq_qp = [];
-    beq_qp = [];
-    lb_qp = zeros(n,1); % R >= 0
-    ub_qp = [];          % No upper bound
-    
-    % Options for quadprog
-    options_qp = optimoptions('quadprog','Display','off');
-    
-    % Solve using quadprog
-    R_quadprog = quadprog(H_qp, f_qp, A_qp, b_qp, Aeq_qp, beq_qp, lb_qp, ub_qp, [], options_qp);
-    
-    % Store Quadprog DRT
-    R_estimated_quadprog(s, :) = R_quadprog';
-    
-    %% 8.8. Nonlinear Optimization using fmincon
-    % Define the objective function
-    objective = @(R) norm(V_sd - (OCV + ik * R0 + W * R), 2)^2 + lambda * norm(L * R', 2)^2;
-    
-    % Initial guess for R
-    R_initial = zeros(n,1);
-    
-    % Define lower bounds (R >= 0)
-    lb_fmin = zeros(n,1);
-    ub_fmin = [];
-    
-    % Options for fmincon
-    options_fmin = optimoptions('fmincon','Display','off','Algorithm','interior-point');
-    
-    % Solve using fmincon
-    R_fmincon = fmincon(objective, R_initial, [], [], [], [], lb_fmin, ub_fmin, [], options_fmin);
-    
-    % Enforce non-negativity
-    R_fmincon(R_fmincon < 0) = 0;
-    
-    % Store fmincon DRT
-    R_estimated_fmincon(s, :) = R_fmincon';
-    
-    %% 8.9. Plot Voltage on Existing Subplots
+    %% 9.7. Plot Voltage on Existing Subplots
     subplot(5, 2, s);
     yyaxis right
     plot(t, V_sd, 'r-', 'LineWidth', 1.5);
@@ -221,22 +165,16 @@ for s = 1:num_scenarios
     legend({'Current (A)', 'Voltage (V)'}, 'Location', 'best');
 end
 
-%% 9. Plot the DRT Comparison for Each Scenario
+%% 10. Plot the DRT Comparison for Each Scenario
 for s = 1:num_scenarios
     figure(1 + s);  % DRT Comparison Figure for each scenario
     hold on;
     
     % Plot True DRT
-    plot(tau_discrete_log, R_discrete_true_log, 'k-', 'LineWidth', 2, 'DisplayName', 'True DRT');
+    semilogx(tau_discrete_log, R_discrete_true_log, 'k-', 'LineWidth', 2, 'DisplayName', 'True DRT');
     
     % Plot Analytical DRT
-    plot(tau_discrete_log, R_estimated_analytic(s, :), 'r--', 'LineWidth', 1.5, 'DisplayName', 'Analytical DRT');
-    
-    % Plot Quadratic Programming DRT
-    plot(tau_discrete_log, R_estimated_quadprog(s, :), 'b--', 'LineWidth', 1.5, 'DisplayName', 'Quadprog DRT');
-    
-    % Plot Nonlinear Optimization DRT
-    plot(tau_discrete_log, R_estimated_fmincon(s, :), 'g--', 'LineWidth', 1.5, 'DisplayName', 'Fmincon DRT');
+    semilogx(tau_discrete_log, R_estimated_analytic(s, :), 'r--', 'LineWidth', 1.5, 'DisplayName', 'Analytical DRT');
     
     hold off;
     xlabel('\tau (Time Constant)');
@@ -246,31 +184,27 @@ for s = 1:num_scenarios
     grid on;
 end
 
-%% 10. Summary Plot Comparing All Optimization Methods Across All Scenarios
+%% 11. Summary Plot Comparing Analytical Solution Across All Scenarios
 figure;
 hold on;
 colors = lines(num_scenarios);
 
 for s = 1:num_scenarios
-    plot(tau_discrete_log, R_estimated_analytic(s, :), '--', 'Color', colors(s,:), 'LineWidth', 1);
-    plot(tau_discrete_log, R_estimated_quadprog(s, :), ':', 'Color', colors(s,:), 'LineWidth', 1);
-    plot(tau_discrete_log, R_estimated_fmincon(s, :), '-.', 'Color', colors(s,:), 'LineWidth', 1);
+    semilogx(tau_discrete_log, R_estimated_analytic(s, :), '--', 'Color', colors(s,:), 'LineWidth', 1, 'DisplayName', ['Analytical S', num2str(s)]);
 end
 
 % Plot True DRT
-plot(tau_discrete_log, R_discrete_true_log, 'k-', 'LineWidth', 2, 'DisplayName', 'True DRT');
+semilogx(tau_discrete_log, R_discrete_true_log, 'k-', 'LineWidth', 2, 'DisplayName', 'True DRT');
 
 xlabel('\tau (Time Constant)');
 ylabel('R (Resistance)');
-title('DRT Estimation Comparison Across All Scenarios');
-legend({'Analytical DRT', 'Quadprog DRT', 'Fmincon DRT', 'True DRT'}, 'Location', 'BestOutside');
+title('DRT Estimation Comparison Across All Scenarios (Analytical Solution)');
+legend('Location', 'BestOutside');
 grid on;
 hold off;
 
-%% 11. Verify Dimensions
+%% 12. Verify Dimensions (Optional)
 disp('Dimensions of matrices:');
 disp(['W: ', mat2str(size(W))]);
-disp(['R_analytic: ', mat2str(size(R_estimated_analytic))]);
-disp(['R_quadprog: ', mat2str(size(R_estimated_quadprog))]);
-disp(['R_fmincon: ', mat2str(size(R_estimated_fmincon))]);
+disp(['R_estimated_analytic: ', mat2str(size(R_estimated_analytic))]);
 disp(['L: ', mat2str(size(L))]);
