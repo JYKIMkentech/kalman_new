@@ -133,7 +133,11 @@ for s = 1:num_scenarios
     end
     
     %% Analytical Solution with Regularization
-    R_analytical = (W' * W + lambda * (L' * L)) \ (W' * V_sd'); 
+    % 상수 제거: OCV와 R0*ik를 빼줌
+    y_adjusted = V_sd' - OCV - R0 * ik';
+    
+    % 정규화된 선형 방정식 풀이
+    R_analytical = (W' * W + lambda * (L' * L)) \ (W' * y_adjusted);
     R_analytical(R_analytical < 0) = 0;  % Enforce non-negativity
     
     %% Store Analytical DRT

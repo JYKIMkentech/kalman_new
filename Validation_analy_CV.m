@@ -123,15 +123,13 @@ for s = 1:num_scenarios
         end
     end
     W_all{s} = W; % Store W matrix
-
-    
 end
 
 %% Cross-Validation to Optimize Lambda
 CVE = zeros(length(candidate_lambdas),1); % Initialize CVE for each lambda
 
 for l = 1:length(candidate_lambdas)
-    lambda = candidate_lambdas(l);
+    current_lambda = candidate_lambdas(l); % Use a different variable name to avoid overwriting
     total_error = 0; % Initialize total CVE
     
     for fold = 1:length(validation_folds)
@@ -152,7 +150,7 @@ for l = 1:length(candidate_lambdas)
         end
         
         %% Analytical Solution for R_train
-        R_train = (sum_WtW + lambda * (L' * L)) \ sum_WtV;
+        R_train = (sum_WtW + current_lambda * (L' * L)) \ sum_WtV;
         R_train(R_train < 0) = 0; % Enforce non-negativity
         
         %% Validation Error Calculation
@@ -201,10 +199,11 @@ grid on;
 set(gca, 'YScale', 'log');  % Set Y-axis to log scale
 
 % Aggressive Y-axis zoom: narrow range to focus on the lower part
-ylim([0.7897, 0.7904]);  % Adjust to focus on the lowest part of the CVE curve
+% Note: Adjust these limits based on the actual CVE values
+ylim([0.7890, 0.7990]);
 
 % Add legend and include optimal lambda in the legend
-legend({'CVE', optimal_lambda_str}, 'Location', 'Best');
+legend({'CVE', optimal_lambda_str}, 'Location', 'best');
 
 hold off;
 
@@ -255,6 +254,5 @@ title('Comparison of True DRT and Optimized DRT');
 legend('Location', 'Best');
 grid on;
 hold off;
-
 
 

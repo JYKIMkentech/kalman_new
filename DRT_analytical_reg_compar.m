@@ -89,8 +89,8 @@ time_fmincon = toc;
 
 %% Quadratic Form Optimization
 % Quadratic form solution
-H = (W' * W + lambda * L' * L); % Regularized Hessian matrix
-f = -W' * V_noisy';  % Linear term for optimization
+H = 2 * (W' * W + lambda * L' * L); % Regularized Hessian matrix
+f = -2 * W' * V_noisy';  % Linear term for optimization
 
 % Quadratic optimization options
 quad_options = optimset('Display', 'iter');

@@ -1,11 +1,12 @@
-clc; clear; close all;
+% 클리어 및 초기 설정
+clear; close all; clc;
 
 %% 1. Parameters
-n = 21;                    % Number of RC elements
+n = 21;                    % Number of RC elements (increased for smoother DRT)
 t = 0:0.01:100;            % Time vector (seconds)
 dt = t(2) - t(1);          % Time step size
 num_scenarios = 10;        % Number of current scenarios
-lambda = 0.0409;           % Regularization parameter
+lambda = 0.05;           % Regularization parameter
 
 %% 2. Define Amplitudes and Periods for Current Synthesis
 A = [1, 1, 1;          % Scenario 1   
@@ -42,16 +43,16 @@ end
 
 %% 4. Define Time Constants on Logarithmic Scale (Natural Log)
 a = 0.01;        % Minimum tau
-b = 100;          % Maximum tau
-theta_j = linspace(log(a), log(b), n); % Linearly spaced in log domain
-tau_discrete_log = exp(theta_j);         % Exponentiate to get tau_j
+b = 100;         % Maximum tau
+theta_j = linspace(log(a), log(b), n); % Linearly spaced in log domain (ln(tau))
+tau_discrete_log = exp(theta_j);        % Exponentiate to get tau_j
 
 %% 5. True DRT Parameters (R_discrete_true)
-mu = 10;         % Mean of the true DRT distribution
-sigma = 5;       % Standard deviation of the true DRT distribution
+mu_log = 0;        % Set peak to be at ln(tau) = 0
+sigma_log = 0.5;   % Standard deviation of the true DRT distribution
 
-% True Resistance Vector based on a Gaussian distribution over log-scale tau
-R_discrete_true_log = normpdf(tau_discrete_log, mu, sigma);
+% True Resistance Vector based on a Gaussian distribution over ln(tau)
+R_discrete_true_log = normpdf(theta_j, mu_log, sigma_log);
 R_discrete_true_log = R_discrete_true_log / max(R_discrete_true_log);  % Normalize to max value of 1
 
 %% 6. Define Regularization Matrix L (1st Order Difference)
@@ -170,14 +171,14 @@ for s = 1:num_scenarios
     figure(1 + s);  % DRT Comparison Figure for each scenario
     hold on;
     
-    % Plot True DRT
-    semilogx(tau_discrete_log, R_discrete_true_log, 'k-', 'LineWidth', 2, 'DisplayName', 'True DRT');
+    % Plot True DRT vs ln(tau)
+    plot(theta_j, R_discrete_true_log, 'k-', 'LineWidth', 2, 'DisplayName', 'True DRT');
     
-    % Plot Analytical DRT
-    semilogx(tau_discrete_log, R_estimated_analytic(s, :), 'r--', 'LineWidth', 1.5, 'DisplayName', 'Analytical DRT');
+    % Plot Analytical DRT vs ln(tau)
+    plot(theta_j, R_estimated_analytic(s, :), 'r--', 'LineWidth', 1.5, 'DisplayName', 'Analytical DRT');
     
     hold off;
-    xlabel('\tau (Time Constant)');
+    xlabel('ln(\tau) (Logarithmic Time Constant)');
     ylabel('R (Resistance)');
     title(['DRT Comparison for Scenario ', num2str(s), ' (\lambda = ', num2str(lambda), ')']);
     legend('Location', 'BestOutside');
@@ -190,13 +191,13 @@ hold on;
 colors = lines(num_scenarios);
 
 for s = 1:num_scenarios
-    semilogx(tau_discrete_log, R_estimated_analytic(s, :), '--', 'Color', colors(s,:), 'LineWidth', 1, 'DisplayName', ['Analytical S', num2str(s)]);
+    plot(theta_j, R_estimated_analytic(s, :), '--', 'Color', colors(s,:), 'LineWidth', 1, 'DisplayName', ['Analytical S', num2str(s)]);
 end
 
-% Plot True DRT
-semilogx(tau_discrete_log, R_discrete_true_log, 'k-', 'LineWidth', 2, 'DisplayName', 'True DRT');
+% Plot True DRT vs ln(tau)
+plot(theta_j, R_discrete_true_log, 'k-', 'LineWidth', 2, 'DisplayName', 'True DRT');
 
-xlabel('\tau (Time Constant)');
+xlabel('ln(\tau) (Logarithmic Time Constant)');
 ylabel('R (Resistance)');
 title('DRT Estimation Comparison Across All Scenarios (Analytical Solution)');
 legend('Location', 'BestOutside');
