@@ -92,7 +92,7 @@ for s = 1:num_scenarios
     %% 9.1. Initialize Voltage
     V_est = zeros(length(t),1);      % Estimated voltage via n-RC model (m x 1)
     R0 = 0.1;                         % Ohmic resistance (Ohms)
-    OCV = 3.7;                        % Open Circuit Voltage (V)
+    OCV = 0;                        % Open Circuit Voltage (V)
     V_RC = zeros(n, length(t));       % RC voltages for each element (n x m)
     
     %% 9.2. Initial Voltage Calculation (First Time Step)
@@ -210,3 +210,4 @@ disp('Dimensions of matrices:');
 disp(['W: ', mat2str(size(W))]);
 disp(['R_estimated_analytic: ', mat2str(size(R_estimated_analytic))]);
 disp(['L: ', mat2str(size(L))]);
+
