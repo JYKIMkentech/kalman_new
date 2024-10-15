@@ -40,19 +40,13 @@ for s = 1:num_scenarios
                          A(s,3)*sin(2*pi*t / T(s,3));
 end
 
-%% True DRT Parameters (R_discrete)
+%% DRT 
+
+% True DRT Parameters (R_discrete)
+
 mu = 10;
 sigma = 5;
 tau_discrete = linspace(0.01, 20, n);  % Discrete tau values
-
-% First-order difference matrix L
-L = zeros(n-1, n);
-for i = 1:n-1
-    L(i, i) = -1;
-    L(i, i+1) = 1;
-end
-
-%% DRT 
 
 % True DRT [Tau,R]
 R_discrete_true = normpdf(tau_discrete, mu, sigma);
@@ -64,6 +58,16 @@ R_analytical_all = zeros(num_scenarios, n);  % Analytical DRT estimates
 % Voltage storage variables (V_est and V_sd for each scenario)
 V_est_all = zeros(num_scenarios, length(t));  % For storing V_est for all scenarios
 V_sd_all = zeros(num_scenarios, length(t));   % For storing V_sd for all scenarios
+
+
+%% First-order difference matrix L
+L = zeros(n-1, n);
+for i = 1:n-1
+    L(i, i) = -1;
+    L(i, i+1) = 1;
+end
+
+
 
 %% Voltage Synthesis and Plotting
 figure(1);  
