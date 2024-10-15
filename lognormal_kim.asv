@@ -1,38 +1,75 @@
 clc; clear; close all;
 
-m = 0.1;
-v = 2;
+% ln(tau) = theta 가 정규분포를 따르는 것
+m = log(10);  % ln(tau)의 평균
+v = 0.2;      % ln(tau)의 표준편차
 
-theta_min = log(0.01); % log(0.01) = -4.6052
-theta_max = log(100); % log (0.01) = 4.6052
+% theta (ln(tau))의 범위 설정 (3 시그마)
+theta_min = m - 3*v;  % 평균 - 3*표준편차
+theta_max = m + 3*v;  % 평균 + 3*표준편차
 
-theta_values = linspace(theta_min, theta_max, 100); % ln(tau)을 일정 간격으로 나눔
+theta_values = linspace(theta_min, theta_max, 1000); % ln(tau)을 일정 간격으로 나눔
 
+% ln(tau)의 normal distribution 계산
 normal_pdf = normpdf(theta_values, m, v);
 
-tau_min = 0.01;
-tau_max = 100;
+% tau의 범위 설정 --> theta 기준으로 tau 범위 설정
+tau_min = exp(theta_min);
+tau_max = exp(theta_max);
 
-tau_values = exp(theta_values);
+tau_values = exp(theta_values); % tau = exp(theta)
 
+% tau의 lognormal distribution 계산
 lognormal_pdf = lognpdf(tau_values, m, v);
 
+% 추가: tau_discrete와 관련된 변수 설정 (예시)
+% 여기서는 tau_discrete를 theta_values의 exp으로 가정
+tau_discrete = tau_values;
+mu = m;
+sigma = v;
 
+% R_discrete_true 계산 및 정규화 (방법 1: 최대값으로 정규화)
+R_discrete_true_max = normpdf(tau_discrete, mu, sigma);
+R_discrete_true_max = R_discrete_true_max / max(R_discrete_true_max);  % 최대값으로 정규화
+
+% R_discrete_true 계산 및 정규화 (방법 2: 면적으로 정규화)
+R_discrete_true_area = normpdf(tau_discrete, mu, sigma);
+delta_tau = tau_discrete(2) - tau_discrete(1);  % tau_discrete의 간격
+R_discrete_true_area = R_discrete_true_area / (sum(R_discrete_true_area) * delta_tau);  % 면적으로 정규화
+
+% 그래프 그리기
 figure;
-subplot(2,1,1);
-plot(theta_values, normal_pdf,  'r-', 'LineWidth', 2);
-xlabel('ln(\tau)');
-ylabel('Gamma');
-title('Normal Distribution of ln(\tau) (Reference DRT)');
 
-subplot(2,1,2)
+% 첫 번째 서브플롯: ln(tau)의 정규분포
+subplot(3,1,1);
+plot(theta_values, normal_pdf,  'r-', 'LineWidth', 2);
+xlabel('ln(\tau) = \theta');
+ylabel('Probability Density');
+title('Normal Distribution of ln(\tau) (Reference DRT)');
+grid on;
+
+% 두 번째 서브플롯: tau의 로그-정규분포
+subplot(3,1,2);
 plot(tau_values, lognormal_pdf, 'b-', 'LineWidth', 2);
 xlabel('\tau');
-ylabel('resistance');
+ylabel('Probability Density');
 title('Lognormal Distribution of \tau (DRT)');
+grid on;
 
+% 세 번째 서브플롯: 정규분포의 정규화된 형태
+subplot(3,1,3);
+hold on;
+plot(tau_discrete, R_discrete_true_max, 'g-', 'LineWidth', 2, 'DisplayName', 'Max Normalized');
+plot(tau_discrete, R_discrete_true_area, 'm--', 'LineWidth', 2, 'DisplayName', 'Area Normalized');
+hold off;
+xlabel('\tau');
+ylabel('Normalized Density');
+title('Normalized Normal Distribution');
+legend('show');
+grid on;
 
-
+% 그래프 레이아웃 정규화 설정
+set(gcf, 'Units', 'normalized', 'Position', [0.1, 0.1, 0.8, 0.8]);  % 화면 비율로 설정
 
 
 
