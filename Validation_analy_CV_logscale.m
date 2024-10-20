@@ -1,7 +1,7 @@
 clc; clear; close all;
 
 %% Parameters
-n = 21;                      % Number of RC elements
+n = 40;                      % Number of RC elements
 t = linspace(0, 100, 1000);  % Time vector (0 to 100 seconds with 1000 points)
 dt = t(2) - t(1);            % Time step
 num_scenarios = 10;          % Total number of scenarios

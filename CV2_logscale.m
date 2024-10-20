@@ -1,13 +1,21 @@
 clc; clear; close all;
 
-%% Parameters 
-n = 21;  % Number of RC elements
-t = 0:0.01:100;  % Time vector (0 to 100 seconds with 10001 points)
-dt = t(2) - t(1); % Time step
-num_scenarios = 10;  % Number of current scenarios
-lambda = 0.05;  % Regularization parameter
+%% ------------------------- Parameters -------------------------
+% Number of RC elements
+n = 40;  % RC 요소의 수
 
-%% Define Amplitudes and Periods for Current Synthesis
+% Time vector: 0 to 100 seconds with 10001 points
+t = 0:0.01:100;
+dt = t(2) - t(1); % 시간 간격
+
+% Number of current scenarios
+num_scenarios = 10;  % 전류 시나리오의 수
+
+% Regularization parameter
+lambda = 0.01;  % 정규화 매개변수
+
+%% ------------------- Define Amplitudes and Periods for Current Synthesis -------------------
+% 각 시나리오에 대한 세 개의 사인파 진폭
 A = [1, 1, 1;          % Scenario 1
      1.7, 0.6, 0.7;    % Scenario 2
      0.2, 0.5, 2.3;    % Scenario 3
@@ -19,6 +27,7 @@ A = [1, 1, 1;          % Scenario 1
      1.1, 1.1, 0.8;    % Scenario 9
      0.1, 0.1, 2.8];   % Scenario 10
 
+% 진폭에 대응하는 주기
 T = [1, 5, 20;         % Scenario 1
      2, 4, 20;         % Scenario 2
      1, 20, 25;        % Scenario 3
@@ -30,61 +39,60 @@ T = [1, 5, 20;         % Scenario 1
      2, 20.8, 26.1;    % Scenario 9
      1.1, 4.3, 20.1];  % Scenario 10
 
-%% Generate Synthetic Current Data (Multi-Sine Approach)
-ik_scenarios = zeros(num_scenarios, length(t)); % Initialize current scenarios
+%% ------------------- Generate Synthetic Current Data (Multi-Sine Approach) -------------------
+% 전류 시나리오를 저장할 행렬 초기화
+ik_scenarios = zeros(num_scenarios, length(t));
 
 for s = 1:num_scenarios
-    % Sum of three sine waves for each scenario
+    % 각 시나리오에 대한 세 개의 사인파 합성
     ik_scenarios(s, :) = A(s,1)*sin(2*pi*t / T(s,1)) + ...
                          A(s,2)*sin(2*pi*t / T(s,2)) + ...
                          A(s,3)*sin(2*pi*t / T(s,3));
 end
 
-%% DRT Parameters
-
-% ln(τ) = θ가 정규분포를 따름
+%% ------------------- DRT Parameters -------------------
+% ln(τ)가 정규분포를 따르도록 파라미터 정의
 mu_theta = log(10);  % ln(τ)의 평균
 sigma_theta = 0.2;   % ln(τ)의 표준편차
 
-% θ (ln(τ)) 값 설정
+% θ (ln(τ))의 범위 정의
 theta_min = mu_theta - 3*sigma_theta;
 theta_max = mu_theta + 3*sigma_theta;
-theta_discrete = linspace(theta_min, theta_max, n);  % ln(τ) 값을 일정 간격으로 분할
+theta_discrete = linspace(theta_min, theta_max, n);  % θ의 이산화
 
-% τ 값은 θ의 지수 함수
-tau_discrete = exp(theta_discrete);  % τ = exp(θ)
+% θ로부터 τ 계산
+tau_discrete = exp(theta_discrete);  % τ = e^θ
 
-% Δτ_log 계산
-delta_tau_log = theta_discrete(2) - theta_discrete(1);  % Δτ_log = ln(τ_{n+1}) - ln(τ_n)
+% Δθ (θ가 균등 간격이므로)
+delta_theta = theta_discrete(2) - theta_discrete(1);  % Δθ = θ_{n+1} - θ_n
 
-% 참 DRT [θ, γ]
-g_discrete_true = normpdf(theta_discrete, mu_theta, sigma_theta);
-gamma_discrete_true = g_discrete_true;  % γ(θ) = g(τ)
-gamma_discrete_true = gamma_discrete_true / max(gamma_discrete_true);  % 최대값으로 정규화
+% True DRT [θ, γ]
+gamma_discrete_true = normpdf(theta_discrete, mu_theta, sigma_theta);
 
-% R_n 계산
-R_n_true = gamma_discrete_true * delta_tau_log;  % R_n = γ_n * Δτ_log
+% R_n_true 계산 (스케일링 적용)
+R_n_true = gamma_discrete_true .* tau_discrete .* delta_theta;  % R_n = γ_n * τ_n * Δθ
 
-%% Regularization Matrix L (First-order derivative)
-% Difference matrix D 생성
+%% ------------------- Regularization Matrix L (First-order derivative) -------------------
+% 1차 도함수를 위한 차분 행렬 D 생성
 D = zeros(n-1, n);
 for i = 1:n-1
     D(i, i) = -1;
     D(i, i+1) = 1;
 end
 
-% 정규화 행렬 L 생성 (스케일링 적용)
-L = (1 / delta_tau_log) * D;
+% Δθ로 정규화된 정규화 행렬 L
+L = (1 / delta_theta) * D;
 
-%% Initialize Storage Variables
-W_all = cell(num_scenarios, 1);      % Store W matrices for all scenarios
-V_sd_all = zeros(num_scenarios, length(t));   % Store noisy V data for all scenarios
+%% ------------------- Initialize Storage Variables -------------------
+W_all = cell(num_scenarios, 1);          % 모든 시나리오의 W 행렬 저장
+V_sd_all = zeros(num_scenarios, length(t));   % 모든 시나리오의 노이즈가 추가된 전압 데이터 저장
+V_est_all = zeros(num_scenarios, length(t));  % 추정된 전압 데이터 저장
 
-%% Plot Synthesized Currents and Voltages
+%% ------------------- Plot Synthesized Currents and Voltages -------------------
 figure;
 sgtitle('Synthesized Current and Voltage for Each Scenario');
 
-% Initialize subplots with current plots
+% 각 시나리오의 전류 플롯 초기화
 for s = 1:num_scenarios
     subplot(5, 2, s);
     yyaxis left
@@ -94,20 +102,20 @@ for s = 1:num_scenarios
     grid on;
 end
 
-%% Voltage Synthesis
+%% ------------------- Voltage Synthesis -------------------
 for s = 1:num_scenarios
     fprintf('Processing Scenario %d/%d...\n', s, num_scenarios);
     
-    % Current for the scenario
-    ik = ik_scenarios(s, :);  % Current scenario input
+    % 현재 시나리오의 전류
+    ik = ik_scenarios(s, :);  % 전류 시나리오 입력
     
     %% Initialize Voltage
-    V_est = zeros(1, length(t));  % Model voltage calculated via n-RC model
-    R0 = 0.1;  % Ohmic resistance
-    OCV = 0;   % Open Circuit Voltage
-    V_RC = zeros(n, length(t));  % RC voltages for each element
+    V_est = zeros(1, length(t));        % n-RC 모델을 통한 모델 전압 계산
+    R0 = 0.1;                            % 오믹 저항 (R0)
+    OCV = 0;                             % 개방 회로 전압 (OCV)
+    V_RC = zeros(n, length(t));         % 각 요소에 대한 RC 전압
     
-    %% Initial Voltage Calculation (first time step)
+    %% Initial Voltage Calculation (첫 번째 시간 단계)
     for i = 1:n
         V_RC(i, 1) = R_n_true(i) * (1 - exp(-dt / tau_discrete(i))) * ik(1);
     end
@@ -122,16 +130,16 @@ for s = 1:num_scenarios
         V_est(k_idx) = OCV + R0 * ik(k_idx) + sum(V_RC(:, k_idx));
     end
     
-    % Store V_est for the current scenario
-    V_est_all(s, :) = V_est;  % Save the calculated V_est for this scenario
+    % 현재 시나리오의 V_est 저장
+    V_est_all(s, :) = V_est;  % 계산된 V_est 저장
     
     %% Add Noise to the Voltage
-    rng(s);  % Ensure reproducibility of noise for each scenario
+    rng(s);  % 각 시나리오에 대한 노이즈의 재현성 보장
     noise_level = 0.01;
-    V_sd = V_est + noise_level * randn(size(V_est));  % V_sd = synthetic measured voltage
+    V_sd = V_est + noise_level * randn(size(V_est));  % V_sd = 합성된 측정 전압
     
-    % Store V_sd for the current scenario
-    V_sd_all(s, :) = V_sd;  % Save the noisy V_sd for this scenario
+    % 현재 시나리오의 V_sd 저장
+    V_sd_all(s, :) = V_sd;  % 노이즈가 추가된 V_sd 저장
     
     %% Plot Voltage on Existing Subplots
     subplot(5, 2, s);
@@ -140,16 +148,16 @@ for s = 1:num_scenarios
     ylabel('Voltage (V)');
     ylim([min(V_sd)-0.1, max(V_sd)+0.1]);
     
-    % Update title with correct amplitudes and periods
+    % 진폭 및 주기를 포함한 제목 업데이트
     title(['Scenario ', num2str(s), ...
            ': A1=', num2str(A(s,1)), ', A2=', num2str(A(s,2)), ', A3=', num2str(A(s,3)), ...
            ', T1=', num2str(T(s,1)), ', T2=', num2str(T(s,2)), ', T3=', num2str(T(s,3))]);
     
-    % Add legend
+    % 범례 추가
     legend({'Current (A)', 'Voltage (V)'}, 'Location', 'best');
     
     %% Construct W Matrix for Scenario s
-    W = zeros(length(t), n);  % Initialize W matrix
+    W = zeros(length(t), n);  % W 행렬 초기화
     for k_idx = 1:length(t)
         for i = 1:n
             if k_idx == 1
@@ -160,55 +168,129 @@ for s = 1:num_scenarios
             end
         end
     end
-    W_all{s} = W; % Store W matrix
+    W_all{s} = W; % W 행렬 저장
 end
 
-%% Combine W and y Across All Scenarios for Joint DRT Estimation
-W_combined = [];
-y_combined = [];
+%% ------------------- DRT Estimation for Scenario 1 -------------------
+% 시나리오 1의 W와 y 추출
+W_s1 = W_all{1};  % 시나리오 1의 W 행렬
+y_s1 = V_sd_all(1, :)' - OCV - R0 * ik_scenarios(1, :)';  % y = V_sd - OCV - R0*I
 
-for s = 1:num_scenarios
-    W_combined = [W_combined; W_all{s}];
-    y_adjusted = V_sd_all(s, :)' - OCV - R0 * ik_scenarios(s, :)';
-    y_combined = [y_combined; y_adjusted];
-end
+% τ와 Δθ로 W를 스케일링하여 W_gamma 생성
+W_gamma = W_s1 .* (tau_discrete .* delta_theta);
 
-%% Regularized Least Squares to Estimate Gamma
-% Solve (W'W + lambda L'L) gamma = W'y
-gamma_estimated = (W_combined' * W_combined + lambda * (L' * L)) \ (W_combined' * y_combined);
-gamma_estimated(gamma_estimated < 0) = 0;  % Enforce non-negativity
+% 정규화된 최소 자승법을 사용하여 Gamma 추정
+gamma_estimated_s1 = (W_gamma' * W_gamma + lambda * (L' * L)) \ (W_gamma' * y_s1);
+gamma_estimated_s1(gamma_estimated_s1 < 0) = 0;  % 비음수 조건 강제
 
-% Normalize gamma_estimated for comparison
-gamma_estimated_normalized = gamma_estimated / max(gamma_estimated);
+% 비교를 위한 gamma_estimated 정규화
+gamma_estimated_s1_normalized = gamma_estimated_s1 / max(gamma_estimated_s1);
 
-%% Plot the DRT Comparison
+%% ------------------- Plot the DRT Comparison for Scenario 1 -------------------
 figure;
-plot(theta_discrete, gamma_discrete_true, 'k-', 'LineWidth', 2, 'DisplayName', 'True DRT');
+plot(theta_discrete, gamma_discrete_true / max(gamma_discrete_true), 'k-', 'LineWidth', 2, 'DisplayName', 'True DRT');
 hold on;
-plot(theta_discrete, gamma_estimated_normalized, 'b--', 'LineWidth', 2, 'DisplayName', 'Estimated DRT');
-xlabel('ln(\tau) = \theta');
+plot(theta_discrete, gamma_estimated_s1_normalized, 'b--', 'LineWidth', 2, 'DisplayName', 'Estimated DRT');
+xlabel('\theta = ln(\tau)');
 ylabel('\gamma(\theta)');
-title(['Comparison of True DRT and Estimated DRT (\lambda = ', num2str(lambda), ')']);
+title(['DRT Comparison (\lambda = ', num2str(lambda), ')']);
 legend('Location', 'Best');
 grid on;
 hold off;
 
-% Adjust graph layout
-set(gcf, 'Units', 'normalized', 'Position', [0.1, 0.1, 0.8, 0.6]);  % Screen ratio
+% 그래프 레이아웃 조정
+set(gcf, 'Units', 'normalized', 'Position', [0.1, 0.1, 0.8, 0.6]);  % 화면 비율
 
-%% Display Total Squared Voltage Error for Each Scenario
+%% ------------------- Display Total Squared Voltage Error for Each Scenario -------------------
 total_test_error = 0;
 for s = 1:num_scenarios
-    % Predict V_pred for the scenario
-    V_pred = W_all{s} * gamma_estimated + R0 * ik_scenarios(s, :)' + OCV;
+    % 추정된 gamma를 사용하여 시나리오의 V_pred 예측
+    R_n_estimated = gamma_estimated_s1 .* tau_discrete .* delta_theta;
+    V_pred = W_all{s} * R_n_estimated + R0 * ik_scenarios(s, :)' + OCV;
     
-    % Actual noisy voltage
+    % 실제 노이즈가 추가된 전압
     V_actual = V_sd_all(s, :)';
     
-    % Compute squared error
+    % 제곱 오차 계산
     error = sum((V_actual - V_pred).^2);
     total_test_error = total_test_error + error;
     
     fprintf('Scenario %d: Squared Voltage Error = %.4f\n', s, error);
 end
 fprintf('Total Squared Voltage Error across all scenarios: %.4f\n', total_test_error);
+
+%% ------------------- (Optional) Aggregated DRT Estimation Using All Scenarios -------------------
+% 모든 시나리오를 사용하여 DRT를 추정하려면 다음 섹션의 주석을 해제하세요
+
+%{
+% 모든 시나리오의 W와 y 초기화
+W_combined = [];
+y_combined = [];
+
+for s = 1:num_scenarios
+    W_combined = [W_combined; W_all{s}];
+    y_combined = [y_combined; V_sd_all(s, :)' - OCV - R0 * ik_scenarios(s, :)'];
+end
+
+% τ와 Δθ로 W_combined를 스케일링하여 W_gamma_combined 생성
+W_gamma_combined = W_combined .* (tau_discrete .* delta_theta);
+
+% 정규화된 최소 자승법을 사용하여 Gamma 추정
+gamma_estimated_combined = (W_gamma_combined' * W_gamma_combined + lambda * (L' * L)) \ (W_gamma_combined' * y_combined);
+gamma_estimated_combined(gamma_estimated_combined < 0) = 0;  % 비음수 조건 강제
+
+% 비교를 위한 gamma_estimated 정규화
+gamma_estimated_combined_normalized = gamma_estimated_combined / max(gamma_estimated_combined);
+
+% Aggregated DRT 비교 플롯
+figure;
+plot(theta_discrete, gamma_discrete_true / max(gamma_discrete_true), 'k-', 'LineWidth', 2, 'DisplayName', 'True DRT');
+hold on;
+plot(theta_discrete, gamma_estimated_combined_normalized, 'b--', 'LineWidth', 2, 'DisplayName', 'Estimated DRT (Combined)');
+xlabel('\theta = ln(\tau)');
+ylabel('\gamma(\theta)');
+title(['Aggregated DRT Comparison (\lambda = ', num2str(lambda), ')']);
+legend('Location', 'Best');
+grid on;
+hold off;
+
+% 그래프 레이아웃 조정
+set(gcf, 'Units', 'normalized', 'Position', [0.1, 0.1, 0.8, 0.6]);  % 화면 비율
+%}
+
+%% ------------------- (Optional) Visualize All Scenarios' DRT Estimation -------------------
+% 각 시나리오별로 DRT 추정을 시각화하려면 다음 섹션의 주석을 해제하세요
+
+%{
+for s = 1:num_scenarios
+    % 시나리오 s의 W와 y 추출
+    W_s = W_all{s};
+    y_s = V_sd_all(s, :)' - OCV - R0 * ik_scenarios(s, :)';
+    
+    % τ와 Δθ로 W를 스케일링하여 W_gamma_s 생성
+    W_gamma_s = W_s .* (tau_discrete .* delta_theta);
+    
+    % 정규화된 최소 자승법을 사용하여 Gamma 추정
+    gamma_estimated_s = (W_gamma_s' * W_gamma_s + lambda * (L' * L)) \ (W_gamma_s' * y_s);
+    gamma_estimated_s(gamma_estimated_s < 0) = 0;  % 비음수 조건 강제
+    
+    % 비교를 위한 gamma_estimated 정규화
+    gamma_estimated_s_normalized = gamma_estimated_s / max(gamma_estimated_s);
+    
+    % 시나리오 s에 대한 DRT 비교 플롯
+    figure;
+    plot(theta_discrete, gamma_discrete_true / max(gamma_discrete_true), 'k-', 'LineWidth', 2, 'DisplayName', 'True DRT');
+    hold on;
+    plot(theta_discrete, gamma_estimated_s_normalized, 'b--', 'LineWidth', 2, 'DisplayName', ['Estimated DRT (Scenario ', num2str(s), ')']);
+    xlabel('\theta = ln(\tau)');
+    ylabel('\gamma(\theta)');
+    title(['DRT Comparison for Scenario ', num2str(s), ' (\lambda = ', num2str(lambda), ')']);
+    legend('Location', 'Best');
+    grid on;
+    hold off;
+    
+    % 그래프 레이아웃 조정
+    set(gcf, 'Units', 'normalized', 'Position', [0.1, 0.1, 0.8, 0.6]);  % 화면 비율
+end
+%}
+
