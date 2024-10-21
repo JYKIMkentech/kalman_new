@@ -1,13 +1,74 @@
 clc; clear; close all;
 
-%% AS1.mat 파일 로드
-load('AS1.mat');  % 첫 번째 코드에서 저장한 A, T, ik_scenarios, t 변수를 불러옵니다.
+%% 1. 전류 시나리오 생성
+% Set the random seed to ensure reproducibility
+rng(0);  % You can change this seed to any number to generate a different fixed random sequence
+
+% Parameters
+num_scenarios = 10;  % Number of current scenarios
+num_waves = 3;       % Number of sine waves per scenario
+t = linspace(0, 1000, 10000);       % Time vector, 더 긴 시간 범위로 설정
+
+% Constraints
+T_min = 15;           % Minimum period value (approximate τ_min * 2π)
+T_max = 250;          % Maximum period value (approximate τ_max * 2π)
+
+% Initialize matrices for amplitudes, periods, and current scenarios
+A = zeros(num_scenarios, num_waves);   % Amplitudes matrix
+T = zeros(num_scenarios, num_waves);   % Periods matrix
+ik_scenarios = zeros(num_scenarios, length(t)); % Current scenarios matrix
+
+% Generate random amplitudes, periods, and current scenarios
+for s = 1:num_scenarios
+    % Random amplitudes that sum to 3
+    temp_A = rand(1, num_waves);       % Generate 3 random amplitudes
+    A(s, :) = 3 * temp_A / sum(temp_A);  % Normalize to make sum equal to 3
+    
+    % Random periods between T_min and T_max on a logarithmic scale
+    log_T_min = log10(T_min);
+    log_T_max = log10(T_max);
+    T_log = log_T_min + (log_T_max - log_T_min) * rand(1, num_waves);
+    T(s, :) = 10.^T_log;
+    
+    % Generate the current scenario as the sum of three sine waves
+    ik_scenarios(s, :) = A(s,1)*sin(2*pi*t / T(s,1)) + ...
+                         A(s,2)*sin(2*pi*t / T(s,2)) + ...
+                         A(s,3)*sin(2*pi*t / T(s,3));
+end
+
+% Save the generated amplitudes, periods, and current scenarios to AS1.mat
+save('AS1.mat', 'A', 'T', 'ik_scenarios', 't');
+
+% Display the generated values for verification
+disp('Amplitudes (A):');
+disp(A);
+disp('Periods (T):');
+disp(T);
+
+% Plot the 10 current scenarios in a 5x2 subplot grid
+figure;
+for s = 1:num_scenarios
+    subplot(5, 2, s);  % Create a 5x2 grid of subplots
+    plot(t, ik_scenarios(s, :), 'LineWidth', 1.5);
+    title(['Scenario ', num2str(s)]);
+    xlabel('Time (s)');
+    ylabel('Current (A)');
+    grid on;
+end
+
+% Adjust the layout for better spacing between subplots
+sgtitle('Current Scenarios for 10 Randomized Cases');
+
+%% 2. DRT 추정 및 교차 검증
+
+% Load the generated AS1.mat 파일
+load('AS1.mat');  % Load A, T, ik_scenarios, t variables
 
 %% Parameters 
 n = 40;  % Number of discrete elements
 dt = t(2) - t(1);  % Time step based on loaded time vector
 num_scenarios = 10;  % Number of current scenarios
-lambda_values = logspace(-4, 9, 50);  % 람다 값 범위 설정
+lambda_values = logspace(-4, 0, 50);  % 람다 값 범위 설정
 
 %% DRT 설정
 
@@ -49,7 +110,10 @@ for i = 1:n-1
     L(i, i+1) = 1;
 end
 
-%% Voltage Synthesis and DRT Estimation
+%% Voltage Synthesis
+R0 = 0.1;  % Ohmic resistance
+OCV = 0;   % Open Circuit Voltage
+
 rng(0);  % Ensure reproducibility of noise
 
 for s = 1:num_scenarios
@@ -60,8 +124,6 @@ for s = 1:num_scenarios
     
     %% Initialize Voltage
     V_est = zeros(1, length(t));  % Model voltage calculated via n-element model
-    R0 = 0.1;  % Ohmic resistance
-    OCV = 0;   % Open Circuit Voltage
     V_RC = zeros(n, length(t));  % Voltages for each element
     
     %% Voltage Calculation
@@ -128,16 +190,38 @@ end
 
 %% CVE vs 람다 그래프 그리기
 figure;
-semilogx(lambda_values, cve_lambda, 'LineWidth', 2);
-xlabel('\lambda');
-ylabel('Cross-Validation Error (CVE)');
-title('CVE vs. \lambda');
-grid on;
+semilogx(lambda_values, cve_lambda, 'b-', 'LineWidth', 1.5); % CVE vs Lambda plot
+hold on;
 
-%% 최적의 람다 선택
+% 최적 \(\lambda\) 포인트 찾기
 [~, min_idx] = min(cve_lambda);
 optimal_lambda = lambda_values(min_idx);
-disp(['Optimal lambda: ', num2str(optimal_lambda)]);
+
+% 최적 \(\lambda\) 포인트 표시
+semilogx(optimal_lambda, cve_lambda(min_idx), 'ro', 'MarkerSize', 10, 'LineWidth', 2);
+
+% 최적 \(\lambda\) 텍스트 추가
+optimal_lambda_str = ['최적 \lambda = ', num2str(optimal_lambda, '%.2e')];
+
+% R0 텍스트 추가
+R0_str = ['R_0 = ', num2str(R0, '%.2f'), ' \Omega'];
+
+% 레이블 및 제목
+xlabel('\lambda (정규화 파라미터)');
+ylabel('교차 검증 오류 (CVE)');
+title('로그 스케일 \lambda 에 따른 CVE 그래프');
+
+% 그리드 및 범례
+grid on;
+set(gca, 'YScale', 'log');  % Y축 로그 스케일 설정
+ylim([min(cve_lambda)/10, max(cve_lambda)*10]); % Y축 한계 조정 (데이터에 맞게 조정 가능)
+legend({'CVE', optimal_lambda_str}, 'Location', 'best');
+
+% R0 값 텍스트 박스 추가
+dim = [0.15 0.7 0.3 0.1]; % 위치 및 크기 [x y width height]
+annotation('textbox', dim, 'String', R0_str, 'FitBoxToText', 'on', 'BackgroundColor', 'white');
+
+hold off;
 
 %% 최적의 람다로 전체 학습 데이터로 gamma 추정
 gamma_optimal = estimate_gamma(optimal_lambda, train_scenarios_full, ik_scenarios, V_sd_all, tau_discrete, delta_theta, L, OCV, R0, dt);
@@ -157,6 +241,7 @@ ylabel('\gamma');
 title(['True vs. Estimated \gamma with Optimal \lambda = ', num2str(optimal_lambda)]);
 legend('Location', 'Best');
 grid on;
+hold off;
 
 % 테스트 시나리오의 전압 비교
 for s = test_scenarios
@@ -173,6 +258,7 @@ for s = test_scenarios
     title(['Voltage Comparison for Test Scenario ', num2str(s)]);
     legend('Location', 'Best');
     grid on;
+    hold off;
 end
 
 %% 함수 정의
@@ -255,3 +341,4 @@ function V_predicted = predict_voltage(gamma_estimated, ik, tau_discrete, delta_
         V_predicted(k_idx) = OCV + R0 * ik(k_idx) + sum(V_RC(:, k_idx));
     end
 end
+
