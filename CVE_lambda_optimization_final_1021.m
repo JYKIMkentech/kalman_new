@@ -1,13 +1,26 @@
 clc; clear; close all;
 
+%% AS1.mat 파일 로드
+% 첫 번째 코드에서 저장한 A, T, ik_scenarios, t 변수를 불러옵니다.
+load('AS1.mat');  % A: Amplitudes, T: Periods, ik_scenarios: Current Scenarios, t: Time Vector
+
 %% Parameters
 n = 40;                      % RC 요소의 수
-t = linspace(0, 100, 1000);  % 시간 벡터 (0초부터 100초까지, 1000포인트)
 dt = t(2) - t(1);            % 시간 간격
 num_scenarios = 10;          % 총 시나리오 수
-validation_folds = {[1,2], [3,4], [5,6], [7,8]}; % 4개의 검증 세트
 test_scenarios = [9,10];     % 테스트 세트
-candidate_lambdas = logspace(-4, 4, 50); % \(\lambda\) 후보 (1e-9부터 1e9까지, 50개)
+candidate_lambdas = logspace(-4, 4, 50); % \(\lambda\) 후보 (1e-4부터 1e4까지, 50개)
+
+%% Generate Validation Folds: All possible combinations of 2 out of 8 (C(8,2)=28)
+train_validation_scenarios = 1:8; % 시나리오 1-8을 교차 검증에 사용
+validation_combinations = nchoosek(train_validation_scenarios, 2); % 28개의 검증 세트 생성
+num_folds = size(validation_combinations, 1); % 28
+validation_folds = mat2cell(validation_combinations, ones(num_folds,1), 2); % 셀 배열로 변환
+
+% 확인: C(8,2) = 28
+if num_folds ~= 28
+    error('검증 폴드 수가 예상과 다릅니다. C(8,2) = 28이어야 합니다.');
+end
 
 %% True DRT Parameters [theta, gamma]
 mu_theta = log(10);  % 평균 ln(τ)
@@ -33,47 +46,15 @@ for i = 1:n-1
 end
 L = D;  % 스케일링 적용하지 않음
 
-%% True DRT [θ, gamma]
+%% True DRT [theta, gamma]
 g_discrete_true = normpdf(theta_discrete, mu_theta, sigma_theta);
 gamma_discrete_true = g_discrete_true;  % γ(θ) = g(θ)
 gamma_discrete_true = gamma_discrete_true / max(gamma_discrete_true);  % 최대값으로 정규화
 
-%% Define Amplitudes and Periods for Current Synthesis
-A = [1, 1, 1;          % 시나리오 1
-     1.7, 0.6, 0.7;    % 시나리오 2
-     0.2, 0.5, 2.3;    % 시나리오 3
-     1.3, 1.1, 0.6;    % 시나리오 4
-     1.7, 1.8, 0.5;    % 시나리오 5
-     1.27, 1.33, 0.4;  % 시나리오 6
-     1.2, 1.6, 0.2;    % 시나리오 7
-     0.9, 0.7, 2.4;    % 시나리오 8
-     1.1, 1.1, 0.8;    % 시나리오 9
-     0.1, 0.1, 2.8];   % 시나리오 10
-
-T = [1, 5, 20;         % 시나리오 1
-     2, 4, 20;         % 시나리오 2
-     1, 20, 25;        % 시나리오 3
-     1.5, 5.3, 19.8;   % 시나리오 4
-     2.5, 4.2, 20.5;   % 시나리오 5
-     1.5, 20.9, 24.2;  % 시나리오 6
-     1.3, 6, 19.3;     % 시나리오 7
-     2.2, 4.8, 20.2;   % 시나리오 8
-     2, 20.8, 26.1;    % 시나리오 9
-     1.1, 4.3, 20.1];  % 시나리오 10
-
-%% Generate Synthetic Current Data (Multi-Sine Approach)
-ik_scenarios = zeros(num_scenarios, length(t)); % 시나리오별 전류 초기화
-
-for s = 1:num_scenarios
-    % 각 시나리오에 대해 세 개의 사인파 합성
-    ik_scenarios(s, :) = A(s,1)*sin(2*pi*t / T(s,1)) + ...
-                         A(s,2)*sin(2*pi*t / T(s,2)) + ...
-                         A(s,3)*sin(2*pi*t / T(s,3));
-end
-
 %% Generate Voltage Data for Each Scenario
 V_est_all = zeros(num_scenarios, length(t)); % 추정 전압 저장
 V_sd_all = cell(num_scenarios, 1);          % 노이즈가 추가된 전압 저장
+W_all = cell(num_scenarios,1);               % W 행렬 저장
 
 rng(0); % 동일한 노이즈 패턴 적용
 noise_level = 0.01; % 노이즈 수준
@@ -81,7 +62,7 @@ noise_level = 0.01; % 노이즈 수준
 for s = 1:num_scenarios
     fprintf('시나리오 %d/%d 데이터 생성 중...\n', s, num_scenarios);
     
-    ik = ik_scenarios(s, :); % 현재 시나리오의 전류
+    ik = ik_scenarios(s, :); % 첫 번째 코드에서 로드한 전류 시나리오 사용
     
     %% 전압 초기화
     V_est = zeros(1, length(t)); % 추정 전압
@@ -131,9 +112,9 @@ for l = 1:length(candidate_lambdas)
     current_lambda = candidate_lambdas(l); % 현재 \(\lambda\)
     total_error = 0; % 총 교차 검증 오류 초기화
     
-    for fold = 1:length(validation_folds)
+    for fold = 1:num_folds
         val_set = validation_folds{fold}; % 현재 검증 세트
-        train_set = setdiff(1:num_scenarios, val_set); % 훈련 세트
+        train_set = setdiff(train_validation_scenarios, val_set); % 훈련 세트 (6개)
         
         % 훈련 세트에서 W_train과 y_train 구성
         W_train = [];
@@ -192,13 +173,13 @@ title('로그 스케일 \lambda 에 따른 CVE 그래프');
 % 그리드 및 범례
 grid on;
 set(gca, 'YScale', 'log');  % Y축 로그 스케일 설정
-ylim([0.7896, 0.7899]); % Y축 한계 조정
+ylim([min(CVE)/10, max(CVE)*10]); % Y축 한계 조정 (데이터에 맞게 조정 가능)
 legend({'CVE', optimal_lambda_str}, 'Location', 'best');
 hold off;
 
 %% Retrain on All Training Data with Optimal Lambda and Evaluate on Test Set
-% 훈련 세트: 시나리오 [1-8]
-train_set_final = setdiff(1:num_scenarios, test_scenarios); % [1-8]
+% 훈련 세트: 시나리오 [1-8] 중 테스트 세트 [9,10] 제외
+train_set_final = setdiff(train_validation_scenarios, test_scenarios); % 시나리오 [1-8]
 sum_WtW_final = zeros(n, n);   % W^T * W 합 초기화
 sum_WtV_final = zeros(n, 1);   % W^T * y 합 초기화
 
@@ -216,7 +197,7 @@ regularization_term = optimal_lambda * (L' * L);
 
 % 최적 \(\gamma\) 계산
 gamma_final = (sum_WtW_final + regularization_term) \ sum_WtV_final;
-gamma_final(gamma_final < 0) = 0; % 음수 값 제거
+%gamma_final(gamma_final < 0) = 0; % 음수 값 제거
 
 %% Test on Test Scenarios [9,10]
 test_set = test_scenarios;

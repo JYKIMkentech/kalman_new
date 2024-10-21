@@ -1,116 +1,84 @@
 clc; clear; close all;
 
+%% Load AS1.mat data (Amplitudes, Periods, and Current Scenarios)
+load('AS1.mat', 'A', 'T', 'ik_scenarios');  % Load A, T, and ik_scenarios from AS1.mat
+
 %% Parameters
-n = 40;                      % RC 요소의 수
-t = linspace(0, 100, 1000);  % 시간 벡터 (0초부터 100초까지, 1000포인트)
-dt = t(2) - t(1);            % 시간 간격
-num_scenarios = 10;          % 총 시나리오 수
-validation_folds = {[1,2], [3,4], [5,6], [7,8]}; % 4개의 검증 세트
-test_scenarios = [9,10];     % 테스트 세트
-candidate_lambdas = logspace(-4, 4, 50); % \(\lambda\) 후보 (1e-4부터 1e4까지, 50개)
+n = 40;                      % RC elements
+t = linspace(0, 100, 1000);   % Time vector
+dt = t(2) - t(1);             % Time step
+num_scenarios = 10;           % Number of scenarios
+validation_folds = {[1,2], [3,4], [5,6], [7,8]};  % Validation sets (4-folds)
+test_scenarios = [9,10];      % Test sets
+candidate_lambdas = logspace(-4, 4, 50);   % Candidate lambda values (from 1e-4 to 1e4)
 
 %% True DRT Parameters [theta, gamma]
-mu_theta = log(10);  % 평균 ln(τ)
-sigma_theta = 1;     % ln(τ)의 표준편차
+mu_theta = log(10);  % Mean of ln(τ)
+sigma_theta = 1;     % Standard deviation of ln(τ)
 
-% θ (ln(τ)) 값 설정
+% Discrete theta (ln(τ)) values
 theta_min = mu_theta - 3*sigma_theta;
 theta_max = mu_theta + 3*sigma_theta;
-theta_discrete = linspace(theta_min, theta_max, n);  % ln(τ)를 균등 간격으로 분할
+theta_discrete = linspace(theta_min, theta_max, n);  % Discretized ln(τ)
 
-% τ 값은 θ의 지수 함수
-tau_discrete = exp(theta_discrete);  % τ = exp(θ)
+% Corresponding tau values (τ = exp(θ))
+tau_discrete = exp(theta_discrete);
 
-% Δθ 계산
-delta_theta = theta_discrete(2) - theta_discrete(1);  % Δθ = θ_{n+1} - θ_n
+% Δθ (Delta theta)
+delta_theta = theta_discrete(2) - theta_discrete(1);
 
 %% Regularization Matrix L (First-order difference, no scaling)
-% 차분 행렬 D 생성
-D = zeros(n-1, n);
+D = zeros(n-1, n);  % First-order difference matrix
 for i = 1:n-1
     D(i, i) = -1;
     D(i, i+1) = 1;
 end
-L = D;  % 스케일링 적용하지 않음
+L = D;
 
 %% True DRT [theta, gamma]
 g_discrete_true = normpdf(theta_discrete, mu_theta, sigma_theta);
-gamma_discrete_true = g_discrete_true;  % γ(theta) = g(theta)
-gamma_discrete_true = gamma_discrete_true / max(gamma_discrete_true);  % 최대값으로 정규화
+gamma_discrete_true = g_discrete_true / max(g_discrete_true);  % Normalize to max value
 
-%% Define Amplitudes and Periods for Current Synthesis
-A = [1, 1, 1;          % 시나리오 1
-     1.7, 0.6, 0.7;    % 시나리오 2
-     0.2, 0.5, 2.3;    % 시나리오 3
-     1.3, 1.1, 0.6;    % 시나리오 4
-     1.7, 1.8, 0.5;    % 시나리오 5
-     1.27, 1.33, 0.4;  % 시나리오 6
-     1.2, 1.6, 0.2;    % 시나리오 7
-     0.9, 0.7, 2.4;    % 시나리오 8
-     1.1, 1.1, 0.8;    % 시나리오 9
-     0.1, 0.1, 2.8];   % 시나리오 10
+%% Voltage Estimation for Each Scenario
+V_est_all = zeros(num_scenarios, length(t));  % To store estimated voltages
+V_sd_all = cell(num_scenarios, 1);            % To store noisy voltages
 
-T = [1, 5, 20;         % 시나리오 1
-     2, 4, 20;         % 시나리오 2
-     1, 20, 25;        % 시나리오 3
-     1.5, 5.3, 19.8;   % 시나리오 4
-     2.5, 4.2, 20.5;   % 시나리오 5
-     1.5, 20.9, 24.2;  % 시나리오 6
-     1.3, 6, 19.3;     % 시나리오 7
-     2.2, 4.8, 20.2;   % 시나리오 8
-     2, 20.8, 26.1;    % 시나리오 9
-     1.1, 4.3, 20.1];  % 시나리오 10
-
-%% Generate Synthetic Current Data (Multi-Sine Approach)
-ik_scenarios = zeros(num_scenarios, length(t)); % 시나리오별 전류 초기화
+rng(0);  % Ensure the same noise pattern
+noise_level = 0.01;  % Noise level
 
 for s = 1:num_scenarios
-    % 각 시나리오에 대해 세 개의 사인파 합성
-    ik_scenarios(s, :) = A(s,1)*sin(2*pi*t / T(s,1)) + ...
-                         A(s,2)*sin(2*pi*t / T(s,2)) + ...
-                         A(s,3)*sin(2*pi*t / T(s,3));
-end
-
-%% Generate Voltage Data for Each Scenario
-V_est_all = zeros(num_scenarios, length(t)); % 추정 전압 저장
-V_sd_all = cell(num_scenarios, 1);          % 노이즈가 추가된 전압 저장
-
-rng(0); % 동일한 노이즈 패턴 적용
-noise_level = 0.01; % 노이즈 수준
-
-for s = 1:num_scenarios
-    fprintf('시나리오 %d/%d 데이터 생성 중...\n', s, num_scenarios);
+    fprintf('Processing scenario %d/%d...\n', s, num_scenarios);
     
-    ik = ik_scenarios(s, :); % 현재 시나리오의 전류
+    ik = ik_scenarios(s, :);  % Current for the scenario
+
+    %% Initialize voltage
+    V_est = zeros(1, length(t));  % Estimated voltage
+    R0 = 0.1;  % Ohmic resistance
+    OCV = 0;   % Open circuit voltage
+    V_RC = zeros(n, length(t));  % Voltages for each RC element
     
-    %% 전압 초기화
-    V_est = zeros(1, length(t)); % 추정 전압
-    R0 = 0.1; % 오믹 저항
-    OCV = 0;  % 개방 회로 전압
-    V_RC = zeros(n, length(t)); % 각 RC 요소의 전압
-    
-    %% 초기 전압 계산 (k=1)
+    %% Initial voltage calculation (k=1)
     for i = 1:n
         V_RC(i, 1) = gamma_discrete_true(i) * delta_theta * ik(1) * (1 - exp(-dt / tau_discrete(i)));
     end
     V_est(1) = OCV + R0 * ik(1) + sum(V_RC(:, 1));
     
-    %% 시간 t > 1에 대한 전압 계산
+    %% Voltage calculation for t > 1
     for k_idx = 2:length(t)
         for i = 1:n
             V_RC(i, k_idx) = V_RC(i, k_idx-1) * exp(-dt / tau_discrete(i)) + ...
-                              gamma_discrete_true(i) * delta_theta * ik(k_idx) * (1 - exp(-dt / tau_discrete(i)));
+                             gamma_discrete_true(i) * delta_theta * ik(k_idx) * (1 - exp(-dt / tau_discrete(i)));
         end
         V_est(k_idx) = OCV + R0 * ik(k_idx) + sum(V_RC(:, k_idx));
     end
     
-    % 추정 전압 저장 및 노이즈 추가
+    % Store estimated voltage and add noise
     V_est_all(s, :) = V_est;
-    V_sd = V_est + noise_level * randn(size(V_est));
+    V_sd = V_est + noise_level * randn(size(V_est));  % Noisy voltage
     V_sd_all{s} = V_sd;
-    
-    %% 시나리오별 W 행렬 구성
-    W = zeros(length(t), n); % W 행렬 초기화
+
+    %% W matrix for each scenario
+    W = zeros(length(t), n);  % Initialize W matrix
     for k_idx = 1:length(t)
         for i = 1:n
             if k_idx == 1
@@ -121,9 +89,8 @@ for s = 1:num_scenarios
             end
         end
     end
-    W_all{s} = W; % W 행렬 저장
+    W_all{s} = W;  % Store W matrix
 end
-
 %% Cross-Validation to Optimize Lambda and Estimate Uncertainty
 CVE = zeros(length(candidate_lambdas),1); % 각 \(\lambda\)에 대한 교차 검증 오류 초기화
 gamma_fold_collection = cell(length(candidate_lambdas), length(validation_folds)); % 각 폴드에서의 gamma 저장

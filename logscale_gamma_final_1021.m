@@ -1,44 +1,13 @@
 clc; clear; close all;
 
+%% AS1.mat 파일 로드
+load('AS1.mat');  % 첫 번째 코드에서 저장한 A, T, ik_scenarios, t 변수를 불러옵니다.
+
 %% Parameters 
-n = 21;  % Number of discrete elements
-t = 0:0.01:100;  % Time vector
-dt = t(2) - t(1);
+n = 40;  % Number of discrete elements
+dt = t(2) - t(1);  % Time step based on loaded time vector
 num_scenarios = 10;  % Number of current scenarios
-lambda = 0.126;  % Regularization parameter
-
-%% Define Amplitudes and Periods for Current Synthesis
-A = [1, 1, 1;          % Scenario 1
-     1.7, 0.6, 0.7;    % Scenario 2
-     0.2, 0.5, 2.3;    % Scenario 3
-     1.3, 1.1, 0.6;    % Scenario 4
-     1.7, 1.8, 0.5;    % Scenario 5
-     1.27, 1.33, 0.4;  % Scenario 6
-     1.2, 1.6, 0.2;    % Scenario 7
-     0.9, 0.7, 2.4;    % Scenario 8
-     1.1, 1.1, 0.8;    % Scenario 9
-     0.1, 0.1, 2.8];   % Scenario 10
-
-T = [1, 5, 20;         % Scenario 1
-     2, 4, 20;         % Scenario 2
-     1, 20, 25;        % Scenario 3
-     1.5, 5.3, 19.8;   % Scenario 4
-     2.5, 4.2, 20.5;   % Scenario 5
-     1.5, 20.9, 24.2;  % Scenario 6
-     1.3, 6, 19.3;     % Scenario 7
-     2.2, 4.8, 20.2;   % Scenario 8
-     2, 20.8, 26.1;    % Scenario 9
-     1.1, 4.3, 20.1];  % Scenario 10
-
-%% Generate Synthetic Current Data (Multi-Sine Approach)
-ik_scenarios = zeros(num_scenarios, length(t)); % Initialize current scenarios
-
-for s = 1:num_scenarios
-    % Sum of three sine waves for each scenario
-    ik_scenarios(s, :) = A(s,1)*sin(2*pi*t / T(s,1)) + ...
-                         A(s,2)*sin(2*pi*t / T(s,2)) + ...
-                         A(s,3)*sin(2*pi*t / T(s,3));
-end
+lambda = 0.15264;  % Regularization parameter
 
 %% DRT 
 
@@ -86,7 +55,7 @@ for s = 1:num_scenarios
     fprintf('Processing Scenario %d/%d...\n', s, num_scenarios);
     
     % Current for the scenario
-    ik = ik_scenarios(s, :);  % Current scenario input
+    ik = ik_scenarios(s, :);  % 로드된 전류 시나리오 사용
     
     %% Initialize Voltage
     V_est = zeros(1, length(t));  % Model voltage calculated via n-element model
