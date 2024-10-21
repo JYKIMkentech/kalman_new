@@ -2,7 +2,7 @@ clc; clear; close all;
 
 %% ------------------------- Parameters -------------------------
 % Number of RC elements
-n = 21;  % RC 요소의 수
+n = 40;  % RC 요소의 수
 
 % Time vector: 0 to 100 seconds with 10001 points
 t = 0:0.01:100;
@@ -12,7 +12,7 @@ dt = t(2) - t(1); % 시간 간격
 num_scenarios = 10;  % 전류 시나리오의 수
 
 % Regularization parameter
-lambda = 0.01;  % 정규화 매개변수
+lambda = 0.014;  % 정규화 매개변수
 
 %% ------------------- Define Amplitudes and Periods for Current Synthesis -------------------
 % 각 시나리오에 대한 세 개의 사인파 진폭
@@ -171,17 +171,39 @@ for s = 1:num_scenarios
     W_all{s} = W; % W 행렬 저장
 end
 
-%% ------------------- DRT Estimation for Scenario 1 -------------------
+%% ------------------- DRT Estimation using fmincon for Scenario 1 -------------------
 % 시나리오 1의 W와 y 추출
 W_s1 = W_all{1};  % 시나리오 1의 W 행렬
-y_s1 = V_sd_all(1, :)' - OCV - R0 * ik_scenarios(1, :)';  % y = V_sd - OCV - R0*I
+ik_s1 = ik_scenarios(1, :)';  % 시나리오 1의 전류
+V_sd_s1 = V_sd_all(1, :)';  % 시나리오 1의 측정 전압
 
 % τ와 Δθ로 W를 스케일링하여 W_gamma 생성
 W_gamma = W_s1 .* (tau_discrete .* delta_theta);
 
-% 정규화된 최소 자승법을 사용하여 Gamma 추정
-gamma_estimated_s1 = (W_gamma' * W_gamma + lambda * (L' * L)) \ (W_gamma' * y_s1);
-gamma_estimated_s1(gamma_estimated_s1 < 0) = 0;  % 비음수 조건 강제
+% 초기 추정값 설정
+x0 = zeros(n, 1);  % γ의 초기값
+
+% 하한 설정 (γ ≥ 0)
+lb = zeros(n, 1);
+
+% 상한 설정 (필요 없는 경우 [])
+ub = [];
+
+% 정규화 행렬 L 정의 (이미 앞에서 정의됨)
+
+% 정규화 매개변수
+lambda = 0.014;
+
+% 목적 함수 정의 (정규화 포함)
+objective_fun = @(gamma) sum((V_sd_s1 - (W_gamma * gamma + R0 * ik_s1 + OCV)).^2) + ...
+                          lambda * norm(L * gamma)^2;
+
+% fmincon 옵션 설정
+options = optimoptions('fmincon', 'Display', 'iter', 'Algorithm', 'interior-point', ...
+                       'MaxIterations', 1000, 'OptimalityTolerance', 1e-8);
+
+% fmincon 실행
+[gamma_estimated_s1, fval] = fmincon(objective_fun, x0, [], [], [], [], lb, ub, [], options);
 
 % 비교를 위한 gamma_estimated 정규화
 gamma_estimated_s1_normalized = gamma_estimated_s1 / max(gamma_estimated_s1);
@@ -190,10 +212,10 @@ gamma_estimated_s1_normalized = gamma_estimated_s1 / max(gamma_estimated_s1);
 figure;
 plot(theta_discrete, gamma_discrete_true / max(gamma_discrete_true), 'k-', 'LineWidth', 2, 'DisplayName', 'True DRT');
 hold on;
-plot(theta_discrete, gamma_estimated_s1_normalized, 'b--', 'LineWidth', 2, 'DisplayName', 'Estimated DRT');
+plot(theta_discrete, gamma_estimated_s1_normalized, 'b--', 'LineWidth', 2, 'DisplayName', 'Estimated DRT (fmincon)');
 xlabel('\theta = ln(\tau)');
 ylabel('\gamma(\theta)');
-title(['DRT Comparison (\lambda = ', num2str(lambda), ')']);
+title(['DRT Comparison using fmincon']);
 legend('Location', 'Best');
 grid on;
 hold off;
@@ -218,5 +240,3 @@ for s = 1:num_scenarios
     fprintf('Scenario %d: Squared Voltage Error = %.4f\n', s, error);
 end
 fprintf('Total Squared Voltage Error across all scenarios: %.4f\n', total_test_error);
-
-
