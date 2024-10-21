@@ -7,7 +7,7 @@ load('AS1.mat');  % 첫 번째 코드에서 저장한 A, T, ik_scenarios, t 변�
 n = 40;  % Number of discrete elements
 dt = t(2) - t(1);  % Time step based on loaded time vector
 num_scenarios = 10;  % Number of current scenarios
-lambda = 0.15264;  % Regularization parameter
+lambda = 0.51795;  % Regularization parameter
 
 %% DRT 
 
@@ -16,8 +16,11 @@ lambda = 0.15264;  % Regularization parameter
 % R_i = gamma_i * delta theta % 면적은 저항 = gamma (세로) * delta (가로, 일정하게)
 
 % True DRT Parameters (gamma_discrete)
-mu_theta = log(10);  % Mean of theta
-sigma_theta = 1;  % Standard deviation of theta
+% mu_theta = -0.3404;       % 계산된 평균 값
+% sigma_theta = 0.4991;     % 계산된 표준편차 값
+
+mu_theta = log(10);       % 계산된 평균 값
+sigma_theta = 1;     % 계산된 표준편차 값
 
 % Discrete theta values (from -3sigma to +3sigma)
 theta_min = mu_theta - 3*sigma_theta;
@@ -110,7 +113,6 @@ for s = 1:num_scenarios
     
     % Regularized least squares solution
     gamma_analytical = (W' * W + lambda * (L' * L)) \ (W' * y_adjusted);
-    gamma_analytical(gamma_analytical < 0) = 0;  % Enforce non-negativity
     
     %% Store Analytical gamma
     gamma_analytical_all(s, :) = gamma_analytical';
