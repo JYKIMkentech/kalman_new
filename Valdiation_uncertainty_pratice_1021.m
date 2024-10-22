@@ -107,7 +107,7 @@ validation_indices = nchoosek(train_scenarios_full, 2);  % 8C2 = 28개의 조합
 num_folds = size(validation_indices, 1);  % 28개의 폴드
 
 cve_lambda = zeros(length(lambda_values), 1);  % 각 람다에 대한 CVE 저장
-cve_fold = zeros(length(lambda_values), num_folds);  % 각 람다 및 폴드에 대한 CVE 저장
+% cve_fold = zeros(length(lambda_values), num_folds);  % 각 람다 및 폴드에 대한 CVE 저장 (삭제)
 gamma_estimates_all = cell(length(lambda_values), num_folds);  % 각 람다 및 폴드에 대한 gamma 저장
 
 for l_idx = 1:length(lambda_values)
@@ -128,9 +128,6 @@ for l_idx = 1:length(lambda_values)
         % 검증 데이터로 전압 예측 및 에러 계산
         error_fold = calculate_error(gamma_estimated, val_scenarios, ik_scenarios, V_sd_all, tau_discrete, delta_theta, OCV, R0, dt);
         
-        % 폴드의 에러 저장
-        cve_fold(l_idx, fold) = error_fold;
-        
         % 폴드의 에러 합산
         cve_total = cve_total + error_fold;
     end
@@ -140,12 +137,12 @@ for l_idx = 1:length(lambda_values)
     fprintf('Lambda %e, CVE: %f\n', lambda, cve_lambda(l_idx));
 end
 
-% CVE의 표준 편차 계산
-cve_std = std(cve_fold, 0, 2);  % 각 람다에 대한 표준 편차
+% % CVE의 표준 편차 계산 (삭제)
+% cve_std = std(cve_fold, 0, 2);  % 각 람다에 대한 표준 편차
 
 %% CVE vs 람다 그래프 그리기
 figure;
-errorbar(lambda_values, cve_lambda, cve_std, 'b-', 'LineWidth', 1.5); % 에러바 포함
+plot(lambda_values, cve_lambda, 'b-', 'LineWidth', 1.5); % 에러바 제거
 hold on;
 
 % 최적 \(\lambda\) 포인트 찾기
@@ -154,11 +151,12 @@ optimal_lambda = lambda_values(min_idx);
 
 % 최적 \(\lambda\) 포인트 표시
 semilogx(optimal_lambda, cve_lambda(min_idx), 'ro', 'MarkerSize', 10, 'LineWidth', 2);
+%ylim([1.983*28 1.9835*28]);
 
 % 레이블 및 제목
 xlabel('\lambda (정규화 파라미터)');
 ylabel('교차 검증 오류 (CVE)');
-title('로그 스케일 \lambda 에 따른 CVE 그래프 (에러바 포함)');
+title('로그 스케일 \lambda 에 따른 CVE 그래프');
 
 % 그리드 및 범례
 grid on;
@@ -172,7 +170,7 @@ num_optimal_folds = num_folds;
 optimal_gamma_estimates = zeros(n, num_optimal_folds);
 
 for fold = 1:num_optimal_folds
-    optimal_gamma_estimates(:, fold) = gamma_estimates_all{min_idx, fold};
+    optimal_gamma_estimates(:, fold) = gamma_estimates_all{min_idx, fold}; % 최적의 람다 인덱스에 해당하는 28개 fold - (세타-gamma) 가져오기 
 end
 
 % γ의 평균 및 표준 편차 계산
@@ -302,4 +300,3 @@ function V_predicted = predict_voltage(gamma_estimated, ik, tau_discrete, delta_
         V_predicted(k_idx) = OCV + R0 * ik(k_idx) + sum(V_RC(:, k_idx));
     end
 end
-

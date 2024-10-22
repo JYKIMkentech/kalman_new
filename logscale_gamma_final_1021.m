@@ -11,6 +11,10 @@ lambda = 0.51795;  % Regularization parameter
 
 %% DRT 
 
+% 세타 (ln (tau)) 가 정규분포를 따른다 ---> tau는 로그정규분포를 따른다. 
+% (tau 평균 : 16.4697, 표준편차 : 21.635)
+
+
 % Theta = ln(tau) (x축)
 % gamma(theta) = [ R(exp(theta)) * exp(theta) ] = [ R(tau) * tau ] (y축)
 % R_i = gamma_i * delta theta % 면적은 저항 = gamma (세로) * delta (가로, 일정하게)
