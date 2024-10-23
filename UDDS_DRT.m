@@ -103,7 +103,36 @@ for i = 1:num_cycles
     udds_data(i).SOC = udds_SOC(start_idx:end_idx);
 end
 
-%% 6. 시간 vs 전류 및 SOC 그래프 작성
+%% 6. 찾은 주기 시작 시간을 fprintf로 출력
+fprintf('Detected Cycle Start Times:\n');
+fprintf('--------------------------\n');
+for i = 1:length(cycle_start_indices)
+    cycle_num = i; % 주기 번호 (Cycle 1, Cycle 2, ...)
+    time_sec = udds_time(cycle_start_indices(i)); % 주기 시작 시간 (초)
+
+    % 마지막 주기의 경우 'Cycle N.xx'와 같이 특별한 이름을 지정할 수 있습니다.
+    if i == length(cycle_start_indices)
+        fprintf('Cycle %d start time: %.2f s (Cycle %.2f)\n', cycle_num, time_sec, cycle_num - 1 + 0.38);
+    else
+        fprintf('Cycle %d start time: %.2f s\n', cycle_num, time_sec);
+    end
+end
+
+%% 7. udds_data 구조체 내용 확인
+% 구조체 배열의 각 요소에 접근하여 데이터를 확인할 수 있습니다.
+disp('udds_data 구조체 배열의 내용:');
+disp('---------------------------');
+
+for i = 1:num_cycles
+    fprintf('Cycle %d:\n', i);
+    fprintf('  Time length: %d samples\n', length(udds_data(i).t));
+    fprintf('  Voltage length: %d samples\n', length(udds_data(i).V));
+    fprintf('  Current length: %d samples\n', length(udds_data(i).I));
+    fprintf('  SOC length: %d samples\n', length(udds_data(i).SOC));
+end
+
+%% 8. Plot
+
 figure;
 hold on;
 
@@ -154,34 +183,4 @@ title('UDDS Current and SOC Profile with Cycle Boundaries');
 legend({'Current (A)', 'SOC', 'Cycle Boundary Markers'}, 'Location', 'best');
 grid on;
 hold off;
-
-%% 7. 찾은 주기 시작 시간을 fprintf로 출력
-fprintf('Detected Cycle Start Times:\n');
-fprintf('--------------------------\n');
-for i = 1:length(cycle_start_indices)
-    cycle_num = i; % 주기 번호 (Cycle 1, Cycle 2, ...)
-    time_sec = udds_time(cycle_start_indices(i)); % 주기 시작 시간 (초)
-
-    % 마지막 주기의 경우 'Cycle N.xx'와 같이 특별한 이름을 지정할 수 있습니다.
-    if i == length(cycle_start_indices)
-        fprintf('Cycle %d start time: %.2f s (Cycle %.2f)\n', cycle_num, time_sec, cycle_num + 0.38);
-    else
-        fprintf('Cycle %d start time: %.2f s\n', cycle_num, time_sec);
-    end
-end
-
-%% 8. udds_data 구조체 내용 확인
-% 구조체 배열의 각 요소에 접근하여 데이터를 확인할 수 있습니다.
-disp('udds_data 구조체 배열의 내용:');
-disp('---------------------------');
-
-for i = 1:num_cycles
-    fprintf('Cycle %d:\n', i);
-    fprintf('  Time length: %d samples\n', length(udds_data(i).t));
-    fprintf('  Voltage length: %d samples\n', length(udds_data(i).V));
-    fprintf('  Current length: %d samples\n', length(udds_data(i).I));
-    fprintf('  SOC length: %d samples\n', length(udds_data(i).SOC));
-end
-
-
 
