@@ -27,217 +27,161 @@ delta_t = [0; diff(udds_time)];  % 각 측정 사이의 시간 간격
 Q_battery = 2.9 * 3600;  % 배터리 용량 (2.9Ah)
 
 % 시간에 따른 SOC 계산
-udds_SOC = SOC_initial - cumsum(udds_current .* delta_t) / Q_battery;
+udds_SOC = SOC_initial + cumsum(udds_current .* delta_t) / Q_battery;
 
-% SOC 값이 0과 1 사이에 있도록 제한
-udds_SOC(udds_SOC > 1) = 1;
-udds_SOC(udds_SOC < 0) = 0;
+%% 4. UDDS 주기 시작점과 끝점 탐지 (Sequential Approach)
+% 초기 설정
+initial_cycle_start_time = 0;          % 첫 주기 시작 시간 (0초)
+next_cycle_duration = 1370;            % 다음 주기까지의 예상 시간 (초)
+current_at_zero = udds_current(1);     % 시간 0에서의 전류
+current_threshold = 0.001;             % 전류 유사성 임계값 (A)
+time_window = 10;                      % 목표 시간 주변의 시간 창 (초)
+total_time = udds_time(end);           % 총 시간
 
-%% 4. OCV 계산
-% SOC에 기반하여 OCV 값을 보간합니다.
-udds_OCV = interp1(soc_values, ocv_values, udds_SOC, 'linear', 'extrap');
+% 주기 시작 인덱스를 저장할 배열 초기화 (첫 주기 시작점 포함)
+cycle_start_indices = 1; % 첫 주기 시작점 (인덱스 1)
 
-%% 5. 파라미터 설정
-n = 40;  % 이산 요소의 수
-num_data = length(udds_time);  % 데이터 포인트의 수
+% 현재 탐색할 주기 시작 시간
+current_cycle_start_time = initial_cycle_start_time;
 
-% τ 값의 범위를 설정합니다 (0초에서 1e5초)
-tau_min = 1e-5;  % 최소 τ 값 (0에 매우 가까운 값)
-tau_max = 1e5;   % 최대 τ 값 (100,000초)
+% 주기 탐색 루프
+while true
+    % 다음 주기 시작 시간 예상
+    t_target = current_cycle_start_time + next_cycle_duration;
 
-% τ 값을 로그 스케일로 생성합니다
-tau_discrete = logspace(log10(tau_min), log10(tau_max), n);
-
-% θ 값을 계산합니다
-theta_discrete = log(tau_discrete);
-
-% delta_theta 계산
-delta_theta = theta_discrete(2) - theta_discrete(1);
-
-%% 6. SOC 타겟 설정 및 γ와 R0 추정
-% SOC 타겟을 5% 간격으로 설정합니다.
-soc_targets = 1:-0.05:0;
-
-% γ 값을 저장할 행렬을 NaN으로 초기화합니다.
-gamma_matrix = NaN(length(soc_targets), n);
-
-% R0 값을 저장할 벡터를 NaN으로 초기화합니다.
-R0_vector = NaN(length(soc_targets), 1);
-
-% 정규화 파라미터 λ 설정
-lambda = 0.51795;  % 필요에 따라 조정
-
-% 각 SOC 타겟에 대해 γ와 R0 추정
-for soc_idx = 1:length(soc_targets)
-    SOC_target = soc_targets(soc_idx);
-    
-    % SOC_target 주변의 데이터를 선택하기 위한 인덱스 찾기
-    % SOC 변화가 너무 크지 않도록 범위를 조정합니다
-    soc_tolerance = 0.02;  % 2%로 증가시킴
-    indices = find(udds_SOC >= (SOC_target - soc_tolerance) & udds_SOC <= (SOC_target + soc_tolerance));
-    
-    % 충분한 데이터 포인트가 있는지 확인합니다.
-    if length(indices) < 20  % 최소 데이터 포인트 수를 20개로 감소
-        disp(['SOC ' num2str(SOC_target*100) '% 에서 데이터 포인트가 충분하지 않습니다.']);
-        continue;
+    % t_target이 총 시간을 초과하면 루프 종료
+    if t_target > total_time
+        break;
     end
-    
-    % 선택된 인덱스에서 데이터 추출
-    idx_start = indices(1);
-    idx_end = indices(end);
-    
-    current_window = udds_current(idx_start:idx_end);
-    voltage_window = udds_voltage(idx_start:idx_end);
-    time_window = udds_time(idx_start:idx_end);
-    SOC_window = udds_SOC(idx_start:idx_end);
-    OCV_window = udds_OCV(idx_start:idx_end);
-    
-    % delta_t 재계산
-    delta_t_window = [0; diff(time_window)];
-    
-    % W 행렬 구성
-    num_data_window = length(time_window);
-    W_window = zeros(num_data_window, n);  % W 행렬 초기화
-    
-    for k = 1:num_data_window
-        if k == 1
-            for i = 1:n
-                W_window(k, i) = current_window(k) * (1 - exp(-delta_t_window(k) / tau_discrete(i))) * delta_theta;
-            end
-        else
-            for i = 1:n
-                W_window(k, i) = W_window(k-1, i) * exp(-delta_t_window(k) / tau_discrete(i)) + ...
-                                 current_window(k) * (1 - exp(-delta_t_window(k) / tau_discrete(i))) * delta_theta;
-            end
-        end
-    end
-    
-    % y 벡터 계산
-    y_window = voltage_window - OCV_window;
-    
-    % Φ 행렬 구성 (전류 및 W 행렬)
-    Phi_window = [current_window, W_window];  % 전류를 첫 번째 열로 추가
-    
-    % 1차 차분 행렬 L 구성 (γ에만 적용)
-    L = zeros(n-1, n);
-    for i = 1:n-1
-        L(i, i) = -1;
-        L(i, i+1) = 1;
-    end
-    
-    % 정규화 행렬 구성 (R0에 정규화를 적용하지 않음)
-    L_extended = [zeros(n-1,1), L];  % L을 확장하여 R0 부분은 0으로 채웁니다.
-    
-    % 비용 함수 최소화를 위한 행렬 방정식 설정
-    A = Phi_window' * Phi_window + lambda * (L_extended' * L_extended);
-    b = Phi_window' * y_window;
-    
-    % θ 추정 (R0와 γ)
-    theta_estimated = A \ b;
-    
-    % 추정된 R0와 γ 분리
-    R0_estimated = theta_estimated(1);
-    gamma_estimated = theta_estimated(2:end);
-    
-    % 결과 저장
-    R0_vector(soc_idx) = R0_estimated;
-    gamma_matrix(soc_idx, :) = gamma_estimated';
-    
-    disp(['SOC ' num2str(SOC_target*100) '% 에서 R0와 γ 추정 완료.']);
-end
 
-%% 7. 추정된 SOC 인덱스 찾기
-valid_indices = ~isnan(R0_vector);
+    % 시간 창 내의 인덱스 찾기
+    indices_in_window = find(abs(udds_time - t_target) <= time_window);
 
-valid_soc_targets = soc_targets(valid_indices);
-valid_gamma_matrix = gamma_matrix(valid_indices, :);
-valid_R0_vector = R0_vector(valid_indices);
+    % 해당 인덱스 중 전류가 시간 0의 전류와 유사한 인덱스 찾기
+    indices_with_similar_current = indices_in_window(abs(udds_current(indices_in_window) - current_at_zero) <= current_threshold);
 
-%% 8. γ(SOC, θ)의 3차원 그래프 그리기
-% gamma_matrix의 행과 열에 해당하는 SOC와 θ 값을 생성합니다.
-[Theta_grid, SOC_grid] = meshgrid(theta_discrete, valid_soc_targets);
+    if ~isempty(indices_with_similar_current)
+        % 목표 시간에 가장 가까운 인덱스 선택
+        [~, idx_closest_time] = min(abs(udds_time(indices_with_similar_current) - t_target));
+        index = indices_with_similar_current(idx_closest_time);
 
-% γ 값을 플로팅에 맞게 설정합니다.
-gamma_matrix_plot = valid_gamma_matrix;
+        % 인덱스 저장
+        cycle_start_indices = [cycle_start_indices; index];
 
-% 3D 그래프 그리기
-figure;
-surf(SOC_grid, Theta_grid, gamma_matrix_plot', 'EdgeColor', 'none');
-xlabel('SOC');
-ylabel('\theta = ln(\tau)');
-zlabel('\gamma(\theta)');
-title('γ(SOC, θ)의 3차원 그래프');
-colorbar;
-view(135, 30);  % 그래프 뷰 각도 조정
-grid on;
-
-%% 9. SOC에 따른 R0 값 플로팅
-figure;
-plot(valid_soc_targets, valid_R0_vector, 'o-', 'LineWidth', 1.5);
-xlabel('SOC');
-ylabel('R0 (Ω)');
-title('SOC에 따른 R0 추정값');
-grid on;
-
-%% 10. 특정 SOC에서 측정된 전압과 모델 전압 비교
-% 유효한 SOC 중 하나를 선택합니다 (예: 첫 번째 유효한 SOC)
-soc_idx = 1;  % 또는 원하는 인덱스로 설정
-
-if any(valid_gamma_matrix(soc_idx, :))
-    % 해당 SOC에서의 데이터 인덱스 찾기
-    SOC_target = valid_soc_targets(soc_idx);
-    soc_tolerance = 0.02;  % 2%
-    indices = find(udds_SOC >= (SOC_target - soc_tolerance) & udds_SOC <= (SOC_target + soc_tolerance));
-    
-    if ~isempty(indices)
-        idx_start = indices(1);
-        idx_end = indices(end);
-        
-        current_window = udds_current(idx_start:idx_end);
-        voltage_window = udds_voltage(idx_start:idx_end);
-        time_window = udds_time(idx_start:idx_end);
-        SOC_window = udds_SOC(idx_start:idx_end);
-        OCV_window = udds_OCV(idx_start:idx_end);
-        
-        % delta_t 재계산
-        delta_t_window = [0; diff(time_window)];
-        
-        % W 행렬 재구성
-        num_data_window = length(time_window);
-        W_window = zeros(num_data_window, n);  % W 행렬 초기화
-        
-        for k = 1:num_data_window
-            if k == 1
-                for i = 1:n
-                    W_window(k, i) = current_window(k) * (1 - exp(-delta_t_window(k) / tau_discrete(i))) * delta_theta;
-                end
-            else
-                for i = 1:n
-                    W_window(k, i) = W_window(k-1, i) * exp(-delta_t_window(k) / tau_discrete(i)) + ...
-                                     current_window(k) * (1 - exp(-delta_t_window(k) / tau_discrete(i))) * delta_theta;
-                end
-            end
-        end
-        
-        % 모델 전압 계산
-        R0_estimated = valid_R0_vector(soc_idx);
-        gamma_estimated = valid_gamma_matrix(soc_idx, :)';
-        V_estimated = OCV_window + R0_estimated * current_window + W_window * gamma_estimated;
-        
-        % 측정된 전압과 모델 전압 비교
-        figure;
-        plot(time_window, voltage_window, 'k-', 'LineWidth', 1.5);
-        hold on;
-        plot(time_window, V_estimated, 'r--', 'LineWidth', 1.5);
-        xlabel('시간 (s)');
-        ylabel('전압 (V)');
-        title(['측정 전압 vs. 모델 전압 (SOC ' num2str(SOC_target*100) '%)']);
-        legend('측정 전압', '모델 전압');
-        grid on;
+        % 다음 탐색을 위해 현재 주기 시작 시간 업데이트
+        current_cycle_start_time = udds_time(index);
     else
-        disp(['SOC ' num2str(SOC_target*100) '% 근처에 데이터가 충분하지 않습니다.']);
+        % 유사한 전류를 찾지 못한 경우, 다음 주기 탐색을 종료
+        break;
     end
-else
-    disp(['SOC ' num2str(SOC_target*100) '%에서 γ 추정값이 없습니다.']);
 end
+
+% 주기 시작점을 중복 없이 정렬
+cycle_start_indices = unique(cycle_start_indices, 'sorted');
+
+%% 5. udds_data 구조체 배열 생성
+% 각 주기의 데이터를 동일한 필드 이름을 가진 구조체 배열로 저장
+num_cycles = length(cycle_start_indices);
+
+% udds_data 구조체 배열 초기화
+udds_data = struct('V', {}, 'I', {}, 't', {}, 'SOC', {});
+
+for i = 1:num_cycles
+    if i < num_cycles
+        start_idx = cycle_start_indices(i);
+        end_idx = cycle_start_indices(i+1) - 1;
+    else
+        start_idx = cycle_start_indices(i);
+        end_idx = length(udds_time);
+    end
+
+    % 각 주기의 데이터를 구조체 배열의 요소로 저장
+    udds_data(i).V = udds_voltage(start_idx:end_idx);
+    udds_data(i).I = udds_current(start_idx:end_idx);
+    udds_data(i).Time_duration = udds_time(start_idx:end_idx) ;%- udds_time(start_idx);
+    udds_data(i).t = udds_time(start_idx:end_idx) - udds_time(start_idx);
+    udds_data(i).SOC = udds_SOC(start_idx:end_idx);
+end
+
+%% 6. 시간 vs 전류 및 SOC 그래프 작성
+figure;
+hold on;
+
+% 왼쪽 y축: 전류
+yyaxis left
+plot(udds_time, udds_current, 'b-', 'DisplayName', 'Current (A)');
+ylabel('Current (A)');
+ylim([min(udds_current)-0.5, max(udds_current)+0.5]);
+
+% 오른쪽 y축: SOC
+yyaxis right
+plot(udds_time, udds_SOC, 'g-', 'DisplayName', 'SOC');
+ylabel('SOC');
+
+% 주기 시작점에 동그라미 표시 및 세로 점선, 주기 라벨 추가
+for i = 1:length(cycle_start_indices)
+    x = udds_time(cycle_start_indices(i));
+    y_current = udds_current(cycle_start_indices(i));
+    y_soc = udds_SOC(cycle_start_indices(i));
+
+    % 주기 시작점에 동그라미 표시
+    plot(x, y_current, 'ro', 'MarkerSize', 8, 'LineWidth', 2);
+
+    % 세로 점선 추가
+    yyaxis left
+    plot([x x], ylim, 'k--', 'LineWidth', 1);
+
+    % 주기 번호 라벨 추가 (점선과 점선 사이에 위치하도록 조정)
+    if i < length(cycle_start_indices)
+        midpoint = (udds_time(cycle_start_indices(i)) + udds_time(cycle_start_indices(i+1))) / 2;
+    else
+        midpoint = udds_time(cycle_start_indices(i)) + (udds_time(end) - udds_time(cycle_start_indices(i))) / 2;
+    end
+
+    % 마지막 라벨은 'Cycle N.xx'로 변경하고 위치 많이 뒤로 조정
+    if i == length(cycle_start_indices)
+        text(midpoint + 100, max(udds_current)+0.3, sprintf('Cycle %.2f', i + 0.38), 'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', 'FontWeight', 'bold');
+    else
+        text(midpoint, max(udds_current)+0.3, sprintf('Cycle %d', i), 'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', 'FontWeight', 'bold');
+    end
+end
+
+% 그래프 설정
+xlabel('Time (s)');
+title('UDDS Current and SOC Profile with Cycle Boundaries');
+
+% 간소화된 범례 추가
+legend({'Current (A)', 'SOC', 'Cycle Boundary Markers'}, 'Location', 'best');
+grid on;
+hold off;
+
+%% 7. 찾은 주기 시작 시간을 fprintf로 출력
+fprintf('Detected Cycle Start Times:\n');
+fprintf('--------------------------\n');
+for i = 1:length(cycle_start_indices)
+    cycle_num = i; % 주기 번호 (Cycle 1, Cycle 2, ...)
+    time_sec = udds_time(cycle_start_indices(i)); % 주기 시작 시간 (초)
+
+    % 마지막 주기의 경우 'Cycle N.xx'와 같이 특별한 이름을 지정할 수 있습니다.
+    if i == length(cycle_start_indices)
+        fprintf('Cycle %d start time: %.2f s (Cycle %.2f)\n', cycle_num, time_sec, cycle_num + 0.38);
+    else
+        fprintf('Cycle %d start time: %.2f s\n', cycle_num, time_sec);
+    end
+end
+
+%% 8. udds_data 구조체 내용 확인
+% 구조체 배열의 각 요소에 접근하여 데이터를 확인할 수 있습니다.
+disp('udds_data 구조체 배열의 내용:');
+disp('---------------------------');
+
+for i = 1:num_cycles
+    fprintf('Cycle %d:\n', i);
+    fprintf('  Time length: %d samples\n', length(udds_data(i).t));
+    fprintf('  Voltage length: %d samples\n', length(udds_data(i).V));
+    fprintf('  Current length: %d samples\n', length(udds_data(i).I));
+    fprintf('  SOC length: %d samples\n', length(udds_data(i).SOC));
+end
+
+
 
