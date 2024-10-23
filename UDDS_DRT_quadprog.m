@@ -159,6 +159,7 @@ for s = 1:num_cycles-1  % 마지막 사이클은 데이터가 짧으므로 제�
     hold off;
 end
 
+
 %% 5. Gamma(SOC, Theta) 3D 그래프 생성
 % 각 사이클의 SOC 중간값에 해당하는 Gamma 값을 3차원으로 배열
 % soc_mid_all: (num_cycles-1) x 1
@@ -190,4 +191,10 @@ alpha(0.8);
 
 % 축의 방향을 맞추기 위해 X축과 Y축을 조정
 axis tight;
+
+%% save
+
+save('gamma_data.mat', 'gamma_sorted', 'soc_sorted', 'theta_discrete', 'R0_est_all', 'soc_mid_all');
+save('soc_ocv_data.mat', 'soc_values', 'ocv_values');
+
 
