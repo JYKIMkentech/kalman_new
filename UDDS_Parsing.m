@@ -131,63 +131,86 @@ for i = 1:num_cycles
     fprintf('  SOC length: %d samples\n', length(udds_data(i).SOC));
 end
 
-%% 8. Plot
+%% 8. Plot with Correct Legend
 
 figure;
 hold on;
 
-% 왼쪽 y축: 전류
+% Plot Current on the left y-axis
 yyaxis left
-plot(udds_time, udds_current, 'b-', 'DisplayName', 'Current (A)');
+h_current = plot(udds_time, udds_current, 'b-', 'LineWidth', 1.5, 'DisplayName', 'Current (A)');
 ylabel('Current (A)');
 ylim([min(udds_current)-0.5, max(udds_current)+0.5]);
 
-% 오른쪽 y축: SOC
+% Plot SOC on the right y-axis
 yyaxis right
-plot(udds_time, udds_SOC, 'g-', 'DisplayName', 'SOC');
+h_soc = plot(udds_time, udds_SOC, 'g-', 'LineWidth', 1.5, 'DisplayName', 'SOC');
 ylabel('SOC');
+ylim([min(udds_SOC)-0.05, max(udds_SOC)+0.05]);
 
-% 주기 시작점에 동그라미 표시 및 세로 점선, 주기 라벨 추가
+% Initialize arrays to store handles for cycle markers and lines
+h_cycle_markers = [];
+h_cycle_lines = [];
+
+% Plot cycle boundaries
 for i = 1:length(cycle_start_indices)
     x = udds_time(cycle_start_indices(i));
     y_current = udds_current(cycle_start_indices(i));
     y_soc = udds_SOC(cycle_start_indices(i));
 
-    % 주기 시작점에 동그라미 표시 (전류)
+    % Plot 'ro' marker on left y-axis for Current
     yyaxis left
-    plot(x, y_current, 'ro', 'MarkerSize', 8, 'LineWidth', 2);
+    h_marker_current = plot(x, y_current, 'ro', 'MarkerSize', 8, 'LineWidth', 2);
+    h_cycle_markers(end+1) = h_marker_current; 
 
-    % 주기 시작점에 동그라미 표시 (SOC)
+    % Plot 'ro' marker on right y-axis for SOC
     yyaxis right
-    plot(x, y_soc, 'ro', 'MarkerSize', 8, 'LineWidth', 2);
+    h_marker_soc = plot(x, y_soc, 'ro', 'MarkerSize', 8, 'LineWidth', 2);
+    h_cycle_markers(end+1) = h_marker_soc; 
 
-    % 세로 점선 추가
+    % Plot vertical dashed line on left y-axis
     yyaxis left
-    plot([x x], ylim, 'k--', 'LineWidth', 1);
+    h_line = plot([x x], ylim, 'k--', 'LineWidth', 1);
+    h_cycle_lines(end+1) = h_line; 
 
-    % 주기 번호 라벨 추가 (점선과 점선 사이에 위치하도록 조정)
+    % Add cycle number labels
     if i < length(cycle_start_indices)
         midpoint = (udds_time(cycle_start_indices(i)) + udds_time(cycle_start_indices(i+1))) / 2;
     else
         midpoint = udds_time(cycle_start_indices(i)) + (udds_time(end) - udds_time(cycle_start_indices(i))) / 2;
     end
 
-    % 마지막 라벨은 'Cycle N.xx'로 변경하고 위치 많이 뒤로 조정
+    % Adjust label for the last cycle
     if i == length(cycle_start_indices)
-        text(midpoint + 100, max(udds_current)+0.3, sprintf('Cycle %.2f', i + 0.38), 'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', 'FontWeight', 'bold');
+        label = sprintf('Cycle %.2f', i - 1 + 0.38);
     else
-        text(midpoint, max(udds_current)+0.3, sprintf('Cycle %d', i), 'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', 'FontWeight', 'bold');
+        label = sprintf('Cycle %d', i);
     end
+
+    % Add text label above the plot
+    text(midpoint, max(udds_current)+0.3, label, 'HorizontalAlignment', 'center', ...
+        'VerticalAlignment', 'bottom', 'FontWeight', 'bold');
 end
 
-% 그래프 설정
+% Reset to left y-axis for consistency
+yyaxis left
+
+% Create dummy plots for legend entries not directly tied to a single plot
+h_cycle_marker_dummy = plot(NaN, NaN, 'ro', 'MarkerSize', 8, 'LineWidth', 2, 'DisplayName', 'Cycle Boundaries');
+h_cycle_line_dummy = plot(NaN, NaN, 'k--', 'LineWidth', 1, 'DisplayName', 'Cycle Lines');
+
+% Combine all legend handles
+legend_handles = [h_current, h_soc, h_cycle_marker_dummy, h_cycle_line_dummy];
+
+% Add legend to the plot
+legend(legend_handles, 'Location', 'best');
+
+% Finalize plot settings
 xlabel('Time (s)');
 title('UDDS Current and SOC Profile with Cycle Boundaries');
-
-% 간소화된 범례 추가
-legend({'Current (A)', 'SOC', 'Cycle Boundary Markers'}, 'Location', 'best');
 grid on;
 hold off;
+
 
 %% Save
 
