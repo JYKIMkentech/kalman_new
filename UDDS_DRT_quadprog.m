@@ -25,7 +25,7 @@ tau_discrete = exp(theta_discrete);
 delta_theta = theta_discrete(2) - theta_discrete(1);
 
 % 정규화 파라미터
-lambda = 0.51795;  % 필요에 따라 조정 가능
+lambda = 0.153;  % 필요에 따라 조정 가능
 
 % Gamma에 대한 1차 차분 행렬 L_gamma 생성
 L_gamma = zeros(n-1, n);
@@ -37,26 +37,31 @@ end
 % R0에 대한 정규화를 피하기 위해 L_aug 생성
 L_aug = [L_gamma, zeros(n-1, 1)];
 
-%% 4. 각 사이클에 대한 DRT 추정 (quadprog 사용)
-num_cycles = length(udds_data);
+%% 4. 각 트립에 대한 DRT 추정 (quadprog 사용)
+num_trips = length(udds_data);
 
 % 결과 저장을 위한 배열 사전 할당
-gamma_est_all = zeros(num_cycles-1, n);  % 마지막 사이클 제외
-R0_est_all = zeros(num_cycles-1, 1);
-soc_mid_all = zeros(num_cycles-1, 1);  % 각 사이클의 중간 SOC 저장
+gamma_est_all = zeros(num_trips-1, n);  % 마지막 트립 제외
+R0_est_all = zeros(num_trips-1, 1);
+soc_mid_all = zeros(num_trips-1, 1);  % 각 트립의 중간 SOC 저장
 
-for s = 1:num_cycles-1  % 마지막 사이클은 데이터가 짧으므로 제외
-    fprintf('Processing Cycle %d/%d...\n', s, num_cycles-1);
+for s = 1:num_trips-1  % 마지막 트립은 데이터가 짧으므로 제외
+    fprintf('Processing Trip %d/%d...\n', s, num_trips-1);
     
-    % 현재 사이클의 데이터 추출
+    % 현재 트립의 데이터 추출
     t = udds_data(s).t;
     ik = udds_data(s).I;
     V_sd = udds_data(s).V;
     SOC = udds_data(s).SOC;
     
-    % 각 사이클의 중간 SOC 계산 (중간 시간에 해당하는 SOC)
-    t_mid = t(end) / 2;  % 사이클의 중간 시간
-    soc_mid_all(s) = interp1(t, SOC, t_mid, 'linear', 'extrap');  % 중간 시간에 해당하는 SOC
+    % 각 트립의 중간 SOC 계산 (중간 시간에 해당하는 SOC)
+    t_mid = t(end) / 2;  % 트립의 중간 시간
+    
+    % t와 SOC를 고유한 t에 대해 정렬 및 중복 제거
+    [t_unique, idx_unique] = unique(t);
+    SOC_unique = SOC(idx_unique);
+    
+    soc_mid_all(s) = interp1(t_unique, SOC_unique, t_mid, 'linear', 'extrap');  % 중간 시간에 해당하는 SOC
     
     % 시간 간격 dt 계산
     delta_t = [0; diff(t)];
@@ -106,7 +111,7 @@ for s = 1:num_cycles-1  % 마지막 사이클은 데이터가 짧으므로 제�
     [Theta_est, ~, exitflag] = quadprog(H, f, A, b, [], [], [], [], [], options);
     
     if exitflag ~= 1
-        warning('Optimization did not converge for cycle %d.', s);
+        warning('Optimization did not converge for trip %d.', s);
     end
     
     % gamma와 R0 추정값 추출
@@ -142,7 +147,7 @@ for s = 1:num_cycles-1  % 마지막 사이클은 데이터가 짧으므로 제�
     plot(theta_discrete, gamma_est, 'LineWidth', 1.5);
     xlabel('\theta = ln(\tau)');
     ylabel('\gamma');
-    title(['DRT for Cycle ', num2str(s)]);
+    title(['DRT for Trip ', num2str(s)]);
     grid on;
     
     %% 4.6 전압 비교 그래프 출력
@@ -153,16 +158,16 @@ for s = 1:num_cycles-1  % 마지막 사이클은 데이터가 짧으므로 제�
     plot(t, V_est, 'r--', 'LineWidth', 1);
     xlabel('Time (s)');
     ylabel('Voltage (V)');
-    title(['Voltage Comparison for Cycle ', num2str(s)]);
+    title(['Voltage Comparison for Trip ', num2str(s)]);
     legend('Measured V_{sd}', 'Estimated V_{est}');
     grid on;
     hold off;
 end
 
 %% 5. Gamma(SOC, Theta) 3D 그래프 생성
-% 각 사이클의 SOC 중간값에 해당하는 Gamma 값을 3차원으로 배열
-% soc_mid_all: (num_cycles-1) x 1
-% gamma_est_all: (num_cycles-1) x n
+% 각 트립의 SOC 중간값에 해당하는 Gamma 값을 3차원으로 배열
+% soc_mid_all: (num_trips-1) x 1
+% gamma_est_all: (num_trips-1) x n
 
 % 정렬: SOC 중간값을 기준으로 오름차순 정렬
 [soc_sorted, sort_idx] = sort(soc_mid_all);
@@ -171,17 +176,19 @@ gamma_sorted = gamma_est_all(sort_idx, :);
 % 그리드 생성
 [SOC_grid, Theta_grid] = meshgrid(soc_sorted, theta_discrete);
 
-% Gamma 값을 전치하여 (n x num_cycles-1) 행렬로 설정
+% Gamma 값을 전치하여 (n x num_trips-1) 행렬로 설정
 Gamma_grid = gamma_sorted';
 
 % 3D 서피스 플롯 생성
 figure(3);
-surf(SOC_grid, Theta_grid, Gamma_grid, 'EdgeColor', 'none');
+surf_handle = surf(SOC_grid, Theta_grid, Gamma_grid, ...
+                  'FaceColor', 'blue', ...      % 단일 색상 지정
+                  'EdgeColor', 'none');         % 테두리 색상 제거
 xlabel('SOC');
 ylabel('\theta = ln(\tau)');
 zlabel('\gamma');
 title('Gamma(SOC, \theta) 3D Surface Plot');
-colorbar;
+% colorbar;  % 색상 매핑이 없으므로 필요 없을 수 있음
 view(135, 30);  % 시점 조정
 grid on;
 

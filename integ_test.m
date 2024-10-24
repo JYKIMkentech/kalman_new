@@ -16,7 +16,7 @@ R1_unique = R1(unique_idx);
 C_unique = C(unique_idx);
 
 % Load UDDS data
-load('C:\Users\USER\Desktop\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\Drive cycles\03-21-17_00.29 25degC_UDDS_Pan18650PF.mat');
+load('G:\공유 드라이브\BSL_Data3\Driving cycles\03-21-17_00.29 25degC_UDDS_Pan18650PF.mat');
 udds_current = meas.Current; % UDDS 전류 데이터
 udds_voltage = meas.Voltage; % UDDS 전압 데이터
 udds_time = meas.Time; % UDDS 시간 데이터
@@ -188,7 +188,7 @@ function [SOC_est, V1_est, Vt_est, P, residual] = soc_estimation(SOC_est, V1_est
     V1_est = X_est(2);
 
     % Covariance update
-    P = (P_predict - K * H_k) * P_predict; % Updated covariance matrix
+    P = P_predict - K * H_k * P_predict; % Updated covariance matrix
     
     % Update the estimated terminal voltage
     Vt_est = interp1(soc_values, ocv_values, SOC_est, 'linear', 'extrap') + V1_est + Config.R0 * ik;

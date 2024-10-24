@@ -16,7 +16,7 @@ R1_unique = R1(unique_idx);
 C_unique = C(unique_idx);
 
 % Load UDDS data
-load('C:\Users\USER\Desktop\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\Drive cycles\03-21-17_00.29 25degC_UDDS_Pan18650PF.mat');
+load('G:\공유 드라이브\BSL_Data3\Driving cycles\03-21-17_00.29 25degC_UDDS_Pan18650PF.mat');
 udds_current = meas.Current; % UDDS 전류 데이터
 udds_voltage = meas.Voltage; % UDDS 전압 데이터
 udds_time = meas.Time; % UDDS 시간 데이터

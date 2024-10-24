@@ -7,9 +7,6 @@ udds_current = meas.Current;  % 전류 데이터 (A)
 udds_voltage = meas.Voltage;  % 전압 데이터 (V)
 udds_time = meas.Time;        % 시간 데이터 (s)
 
-% 시간 벡터가 0에서 시작하고 연속적이도록 보정합니다.
-udds_time = udds_time - udds_time(1);
-
 %% 2. SOC-OCV 데이터 로드
 % SOC-OCV 데이터를 로드합니다.
 load('soc_ocv.mat', 'soc_ocv');
@@ -29,25 +26,25 @@ Q_battery = 2.9 * 3600;  % 배터리 용량 (2.9Ah)
 % 시간에 따른 SOC 계산
 udds_SOC = SOC_initial + cumsum(udds_current .* delta_t) / Q_battery;
 
-%% 4. UDDS 주기 시작점과 끝점 탐지 (Sequential Approach)
+%% 4. UDDS 트립 시작점과 끝점 탐지 (Sequential Approach)
 % 초기 설정
-initial_cycle_start_time = 0;          % 첫 주기 시작 시간 (0초)
-next_cycle_duration = 1370;            % 다음 주기까지의 예상 시간 (초)
+initial_trip_start_time = 0;          % 첫 트립 시작 시간 (0초)
+next_trip_duration = 1370;            % 다음 트립까지의 예상 시간 (초)
 current_at_zero = udds_current(1);     % 시간 0에서의 전류
 current_threshold = 0.001;             % 전류 유사성 임계값 (A)
 time_window = 10;                      % 목표 시간 주변의 시간 창 (초)
 total_time = udds_time(end);           % 총 시간
 
-% 주기 시작 인덱스를 저장할 배열 초기화 (첫 주기 시작점 포함)
-cycle_start_indices = 1; % 첫 주기 시작점 (인덱스 1)
+% 트립 시작 인덱스를 저장할 배열 초기화 (첫 트립 시작점 포함)
+trip_start_indices = 1; % 첫 트립 시작점 (인덱스 1)
 
-% 현재 탐색할 주기 시작 시간
-current_cycle_start_time = initial_cycle_start_time;
+% 현재 탐색할 트립 시작 시간
+current_trip_start_time = initial_trip_start_time;
 
-% 주기 탐색 루프
+% 트립 탐색 루프
 while true
-    % 다음 주기 시작 시간 예상
-    t_target = current_cycle_start_time + next_cycle_duration;
+    % 다음 트립 시작 시간 예상
+    t_target = current_trip_start_time + next_trip_duration;
 
     % t_target이 총 시간을 초과하면 루프 종료
     if t_target > total_time
@@ -66,36 +63,36 @@ while true
         index = indices_with_similar_current(idx_closest_time);
 
         % 인덱스 저장
-        cycle_start_indices = [cycle_start_indices; index];
+        trip_start_indices = [trip_start_indices; index];
 
-        % 다음 탐색을 위해 현재 주기 시작 시간 업데이트
-        current_cycle_start_time = udds_time(index);
+        % 다음 탐색을 위해 현재 트립 시작 시간 업데이트
+        current_trip_start_time = udds_time(index);
     else
-        % 유사한 전류를 찾지 못한 경우, 다음 주기 탐색을 종료
+        % 유사한 전류를 찾지 못한 경우, 다음 트립 탐색을 종료
         break;
     end
 end
 
-% 주기 시작점을 중복 없이 정렬
-cycle_start_indices = unique(cycle_start_indices, 'sorted');
+% 트립 시작점을 중복 없이 정렬
+trip_start_indices = unique(trip_start_indices, 'sorted');
 
 %% 5. udds_data 구조체 배열 생성
-% 각 주기의 데이터를 동일한 필드 이름을 가진 구조체 배열로 저장
-num_cycles = length(cycle_start_indices);
+% 각 트립의 데이터를 동일한 필드 이름을 가진 구조체 배열로 저장
+num_trips = length(trip_start_indices);
 
 % udds_data 구조체 배열 초기화
 udds_data = struct('V', {}, 'I', {}, 't', {}, 'SOC', {});
 
-for i = 1:num_cycles
-    if i < num_cycles
-        start_idx = cycle_start_indices(i);
-        end_idx = cycle_start_indices(i+1) - 1;
+for i = 1:num_trips
+    if i < num_trips
+        start_idx = trip_start_indices(i);
+        end_idx = trip_start_indices(i+1) - 1;
     else
-        start_idx = cycle_start_indices(i);
+        start_idx = trip_start_indices(i);
         end_idx = length(udds_time);
     end
 
-    % 각 주기의 데이터를 구조체 배열의 요소로 저장
+    % 각 트립의 데이터를 구조체 배열의 요소로 저장
     udds_data(i).V = udds_voltage(start_idx:end_idx);
     udds_data(i).I = udds_current(start_idx:end_idx);
     udds_data(i).Time_duration = udds_time(start_idx:end_idx);
@@ -103,18 +100,18 @@ for i = 1:num_cycles
     udds_data(i).SOC = udds_SOC(start_idx:end_idx);
 end
 
-%% 6. 찾은 주기 시작 시간을 fprintf로 출력
-fprintf('Detected Cycle Start Times:\n');
+%% 6. 찾은 트립 시작 시간을 fprintf로 출력
+fprintf('Detected Trip Start Times:\n');
 fprintf('--------------------------\n');
-for i = 1:length(cycle_start_indices)
-    cycle_num = i; % 주기 번호 (Cycle 1, Cycle 2, ...)
-    time_sec = udds_time(cycle_start_indices(i)); % 주기 시작 시간 (초)
+for i = 1:length(trip_start_indices)
+    trip_num = i; % 트립 번호 (Trip 1, Trip 2, ...)
+    time_sec = udds_time(trip_start_indices(i)); % 트립 시작 시간 (초)
 
-    % 마지막 주기의 경우 'Cycle N.xx'와 같이 특별한 이름을 지정할 수 있습니다.
-    if i == length(cycle_start_indices)
-        fprintf('Cycle %d start time: %.2f s (Cycle %.2f)\n', cycle_num, time_sec, cycle_num - 1 + 0.38);
+    % 마지막 트립의 경우 'Trip N.xx'와 같이 특별한 이름을 지정할 수 있습니다.
+    if i == length(trip_start_indices)
+        fprintf('Trip %d start time: %.2f s (Trip %.2f)\n', trip_num, time_sec, trip_num - 1 + 0.38);
     else
-        fprintf('Cycle %d start time: %.2f s\n', cycle_num, time_sec);
+        fprintf('Trip %d start time: %.2f s\n', trip_num, time_sec);
     end
 end
 
@@ -123,8 +120,8 @@ end
 disp('udds_data 구조체 배열의 내용:');
 disp('---------------------------');
 
-for i = 1:num_cycles
-    fprintf('Cycle %d:\n', i);
+for i = 1:num_trips
+    fprintf('Trip %d:\n', i);
     fprintf('  Time length: %d samples\n', length(udds_data(i).t));
     fprintf('  Voltage length: %d samples\n', length(udds_data(i).V));
     fprintf('  Current length: %d samples\n', length(udds_data(i).I));
@@ -148,43 +145,43 @@ h_soc = plot(udds_time, udds_SOC, 'g-', 'LineWidth', 1.5, 'DisplayName', 'SOC');
 ylabel('SOC');
 ylim([min(udds_SOC)-0.05, max(udds_SOC)+0.05]);
 
-% Initialize arrays to store handles for cycle markers and lines
-h_cycle_markers = [];
-h_cycle_lines = [];
+% Initialize arrays to store handles for trip markers and lines
+h_trip_markers = [];
+h_trip_lines = [];
 
-% Plot cycle boundaries
-for i = 1:length(cycle_start_indices)
-    x = udds_time(cycle_start_indices(i));
-    y_current = udds_current(cycle_start_indices(i));
-    y_soc = udds_SOC(cycle_start_indices(i));
+% Plot trip boundaries
+for i = 1:length(trip_start_indices)
+    x = udds_time(trip_start_indices(i));
+    y_current = udds_current(trip_start_indices(i));
+    y_soc = udds_SOC(trip_start_indices(i));
 
     % Plot 'ro' marker on left y-axis for Current
     yyaxis left
     h_marker_current = plot(x, y_current, 'ro', 'MarkerSize', 8, 'LineWidth', 2);
-    h_cycle_markers(end+1) = h_marker_current; 
+    h_trip_markers(end+1) = h_marker_current; 
 
     % Plot 'ro' marker on right y-axis for SOC
     yyaxis right
     h_marker_soc = plot(x, y_soc, 'ro', 'MarkerSize', 8, 'LineWidth', 2);
-    h_cycle_markers(end+1) = h_marker_soc; 
+    h_trip_markers(end+1) = h_marker_soc; 
 
     % Plot vertical dashed line on left y-axis
     yyaxis left
     h_line = plot([x x], ylim, 'k--', 'LineWidth', 1);
-    h_cycle_lines(end+1) = h_line; 
+    h_trip_lines(end+1) = h_line; 
 
-    % Add cycle number labels
-    if i < length(cycle_start_indices)
-        midpoint = (udds_time(cycle_start_indices(i)) + udds_time(cycle_start_indices(i+1))) / 2;
+    % Add trip number labels
+    if i < length(trip_start_indices)
+        midpoint = (udds_time(trip_start_indices(i)) + udds_time(trip_start_indices(i+1))) / 2;
     else
-        midpoint = udds_time(cycle_start_indices(i)) + (udds_time(end) - udds_time(cycle_start_indices(i))) / 2;
+        midpoint = udds_time(trip_start_indices(i)) + (udds_time(end) - udds_time(trip_start_indices(i))) / 2;
     end
 
-    % Adjust label for the last cycle
-    if i == length(cycle_start_indices)
-        label = sprintf('Cycle %.2f', i - 1 + 0.38);
+    % Adjust label for the last trip
+    if i == length(trip_start_indices)
+        label = sprintf('Trip %.2f', i - 1 + 0.38);
     else
-        label = sprintf('Cycle %d', i);
+        label = sprintf('Trip %d', i);
     end
 
     % Add text label above the plot
@@ -196,23 +193,23 @@ end
 yyaxis left
 
 % Create dummy plots for legend entries not directly tied to a single plot
-h_cycle_marker_dummy = plot(NaN, NaN, 'ro', 'MarkerSize', 8, 'LineWidth', 2, 'DisplayName', 'Cycle Boundaries');
-h_cycle_line_dummy = plot(NaN, NaN, 'k--', 'LineWidth', 1, 'DisplayName', 'Cycle Lines');
+h_trip_marker_dummy = plot(NaN, NaN, 'ro', 'MarkerSize', 8, 'LineWidth', 2, 'DisplayName', 'Trip Boundaries');
+h_trip_line_dummy = plot(NaN, NaN, 'k--', 'LineWidth', 1, 'DisplayName', 'Trip Lines');
 
 % Combine all legend handles
-legend_handles = [h_current, h_soc, h_cycle_marker_dummy, h_cycle_line_dummy];
+legend_handles = [h_current, h_soc, h_trip_marker_dummy, h_trip_line_dummy];
 
 % Add legend to the plot
 legend(legend_handles, 'Location', 'best');
 
 % Finalize plot settings
 xlabel('Time (s)');
-title('UDDS Current and SOC Profile with Cycle Boundaries');
+title('UDDS Current and SOC Profile with Trip Boundaries');
 grid on;
 hold off;
 
 
 %% Save
 
+% Save the udds_data structure
 save('udds_data.mat', 'udds_data');
-

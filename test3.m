@@ -1,8 +1,8 @@
 clc; clear; close all;
 
 % 데이터 로드
-%data = load('C:\Users\deu04\OneDrive\바탕 화면\wykht8y7tg-1\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\5 pulse disch\03-11-17_08.47 25degC_5Pulse_HPPC_Pan18650PF.mat');
-data = load('C:\Users\김준연\Desktop\wykht8y7tg-1\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\5 pulse disch\03-11-17_08.47 25degC_5Pulse_HPPC_Pan18650PF.mat');
+data = load('C:\Users\deu04\OneDrive\바탕 화면\wykht8y7tg-1\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\5 pulse disch\03-11-17_08.47 25degC_5Pulse_HPPC_Pan18650PF.mat');
+%data = load('C:\Users\김준연\Desktop\wykht8y7tg-1\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\5 pulse disch\03-11-17_08.47 25degC_5Pulse_HPPC_Pan18650PF.mat');
 % 시간, 전압, 전류 데이터 추출
 % 시간, 전압, 전류 데이터 추출
 time = data.meas.Time;
@@ -88,10 +88,8 @@ for i = 1:length(data)
     end
 end
 
-<<<<<<< HEAD:DCIR.asv
 
-=======
->>>>>>> 83642e987dd2fa1f625184e6793b508c33bf8e8a:test3.m
+
 %% R0, R1, C 추출 
 
 % 평균 전류 구하기
@@ -144,15 +142,13 @@ end
 
 %% 63.2% 값을 이용한 tau 및 C 계산
 
-<<<<<<< HEAD:DCIR.asv
 % % 시간 초기화
 % for i = 1 : length(data)
 %     initialTime = data(i).t(1); % 초기 시간 저장
 %     data(i).t = data(i).t - initialTime; % 초기 시간을 빼서 시간 초기화
 % end
 
-=======
->>>>>>> 83642e987dd2fa1f625184e6793b508c33bf8e8a:test3.m
+
 timeAt632 = zeros(1, length(step_dis));  % Initialize timeAt632 as a matrix
 
 for i = 1:length(step_dis)
@@ -187,7 +183,6 @@ for i = 1:length(step_dis)
     data(step_dis(i)).C = data(step_dis(i)).timeAt632 / (data(step_dis(i)).R1s - data(step_dis(i)).R001s);
 end
 
-<<<<<<< HEAD:DCIR.asv
 % SOC 값을 정의된 패턴에 따라 생성
 soc_values = [1, 0.95, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.25, 0.2, 0.15, 0.1, 0.05];
 steps_per_level = 5;
@@ -214,26 +209,22 @@ optimized_params_struct = struct('R0', [], 'R1', [], 'C', [], 'SOC', [], 'avgI',
 
 % 초기 추정값 개수 설정
 num_start_points = 10; % 원하는 시작점의 개수 설정
-=======
+
 % 구조체 생성
 optimized_params_struct = struct('R0', [], 'R1', [], 'C', [], 'SOC', []);
->>>>>>> 83642e987dd2fa1f625184e6793b508c33bf8e8a:test3.m
 
 for i = 1:length(step_dis)
     deltaV_exp = data(step_dis(i)).deltaV;
     time_exp = data(step_dis(i)).t;
     avgI = data(step_dis(i)).avgI;  % 각 스텝의 평균 전류 가져오기
-<<<<<<< HEAD:DCIR.asv
     m = 0.2 / data(step_dis(i)).timeAt632; % timeAt632의 역수를 m으로 설정
-=======
+
     m = 0.5 / data(step_dis(i)).timeAt632; % timeAt632의 역수를 m으로 설정
->>>>>>> 83642e987dd2fa1f625184e6793b508c33bf8e8a:test3.m
 
     % 스텝의 시간 길이 확인
     step_duration = time_exp(end) - time_exp(1);
 
     if step_duration >= 5 % 스텝의 시간이 5초 이상인 경우에만 저장
-<<<<<<< HEAD:DCIR.asv
         % 최적화를 위한 여러 초기 추정값 생성
         initial_guesses = repmat([data(step_dis(i)).R1, data(step_dis(i)).C], num_start_points, 1);
 
@@ -242,19 +233,14 @@ for i = 1:length(step_dis)
             initial_guesses(k, 1) = initial_guesses(k, 1) * (1 + 0.1 * (rand - 0.5)); % R1 변동
             initial_guesses(k, 2) = initial_guesses(k, 2) * (1 + 0.1 * (rand - 0.5)); % C 변동
         end
-=======
         % 최적화를 위한 초기 추정값 (R0를 제외하고 R1과 C만 포함)
         initial_guess = [data(step_dis(i)).R1, data(step_dis(i)).C];
->>>>>>> 83642e987dd2fa1f625184e6793b508c33bf8e8a:test3.m
 
         % fmincon을 사용하여 최적화 수행
         options = optimoptions('fmincon', 'Display', 'iter', 'MaxIterations', 100);
         problem = createOptimProblem('fmincon', 'objective', @(params) cost_function(params, time_exp, deltaV_exp, avgI, m, data(step_dis(i)).R0), ...
-<<<<<<< HEAD:DCIR.asv
             'x0', initial_guesses, 'lb', [0, 0], 'ub', [], 'options', options);
-=======
             'x0', initial_guess, 'lb', [0, 0], 'ub', [], 'options', options);
->>>>>>> 83642e987dd2fa1f625184e6793b508c33bf8e8a:test3.m
         ms = MultiStart('Display', 'iter');
 
         [opt_params, ~] = run(ms, problem, num_start_points); % 여러 시작점으로 실행
@@ -263,12 +249,9 @@ for i = 1:length(step_dis)
         optimized_params_struct(i).R1 = opt_params(1);
         optimized_params_struct(i).C = opt_params(2);
         optimized_params_struct(i).SOC = mean(data(step_dis(i)).SOC); % 평균 SOC 값을 저장
-<<<<<<< HEAD:DCIR.asv
         optimized_params_struct(i).Crate = avgI/data(step_dis(2)).avgI; % 평균 전류 저장
 
-=======
         
->>>>>>> 83642e987dd2fa1f625184e6793b508c33bf8e8a:test3.m
         voltage_model = model_func(time_exp, optimized_params_struct(i).R0, opt_params(1), opt_params(2), avgI);
 
         figure('Position', [0 0 800 600]);
@@ -292,15 +275,12 @@ for i = 1:length(step_dis)
         timeAt632_plot = data(step_dis(i)).timeAt632;
         line([timeAt632_plot, timeAt632_plot], [min(deltaV_exp), max(deltaV_exp)], 'Color', 'green', 'LineStyle', '--');
 
-<<<<<<< HEAD:DCIR.asv
         % SOC 값 표시
         soc_text = sprintf('SOC: %.2f%%', optimized_params_struct(i).SOC * 100);
         text(time_exp(1) + (time_exp(end) - time_exp(1)) * 0.05, max(deltaV_exp) * 0.9, soc_text, 'FontSize', 12, 'Color', 'black', 'FontWeight', 'bold');
-=======
         % avgI 값 표시
         avgI_text = sprintf('avgI: %.2fA', avgI);
         text(time_exp(1) + (time_exp(end) - time_exp(1)) * 0.05, max(deltaV_exp) * 0.9, avgI_text, 'FontSize', 12, 'Color', 'black', 'FontWeight', 'bold');
->>>>>>> 83642e987dd2fa1f625184e6793b508c33bf8e8a:test3.m
 
         legend('실험 데이터', '모델 결과', '63.2% 시간');
         xlabel('시간 (sec)');
@@ -331,7 +311,6 @@ for i = 1:length(step_dis)
     end
 end
 
-<<<<<<< HEAD:DCIR.asv
 
 %% R0 그래프 그리기
 
@@ -378,8 +357,6 @@ grid on;
 
 %% 함수
 
-=======
->>>>>>> 83642e987dd2fa1f625184e6793b508c33bf8e8a:test3.m
 function cost = cost_function(params, time, deltaV, I, m, R0)
     R1 = params(1);
     C = params(2);
@@ -403,10 +380,7 @@ function voltage = model_func(time, R0, R1, C, I)
     voltage = I * (R0 + R1 * (1 - exp(-time / (R1 * C))));
 end
 
-<<<<<<< HEAD:DCIR.asv
 
 
 
 
-=======
->>>>>>> 83642e987dd2fa1f625184e6793b508c33bf8e8a:test3.m
