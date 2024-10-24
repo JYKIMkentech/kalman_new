@@ -25,7 +25,7 @@ tau_discrete = exp(theta_discrete);
 delta_theta = theta_discrete(2) - theta_discrete(1);
 
 % 정규화 파라미터
-lambda = 0.153;  % 필요에 따라 조정 가능
+lambda = 0.204;  % 필요에 따라 조정 가능
 
 % Gamma에 대한 1차 차분 행렬 L_gamma 생성
 L_gamma = zeros(n-1, n);
@@ -186,8 +186,8 @@ surf_handle = surf(SOC_grid, Theta_grid, Gamma_grid, ...
                   'FaceColor', 'blue', ...      % 단일 색상 지정
                   'EdgeColor', 'none');         % 테두리 색상 제거
 xlabel('SOC');
-ylabel('\theta = ln(\tau)');
-zlabel('\gamma');
+ylabel('\theta = ln(\tau [s] )');
+zlabel('γ [Ω /s]');
 title('Gamma(SOC, \theta) 3D Surface Plot');
 % colorbar;  % 색상 매핑이 없으므로 필요 없을 수 있음
 view(135, 30);  % 시점 조정

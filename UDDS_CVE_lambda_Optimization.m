@@ -25,7 +25,7 @@ tau_discrete = exp(theta_discrete);
 delta_theta = theta_discrete(2) - theta_discrete(1);
 
 % 정규화 파라미터 람다 값 범위 설정
-lambda_values = logspace(-4, 9, 50);  % 필요에 따라 조정 가능
+lambda_values = logspace(-4, 3 , 10);  % 필요에 따라 조정 가능
 
 % Gamma에 대한 1차 차분 행렬 L_gamma 생성
 L_gamma = zeros(n-1, n);
@@ -38,7 +38,7 @@ end
 L_aug = [L_gamma, zeros(n-1, 1)];
 
 %% 4. 각 사이클의 데이터 준비
-num_cycles = length(udds_data);
+num_cycles = length(udds_data)-3;
 
 % 사이클별 데이터 저장을 위한 셀 배열 초기화
 t_all = cell(num_cycles, 1);
@@ -90,7 +90,7 @@ for l_idx = 1:length(lambda_values)
     end
     
     % 평균 CVE 계산
-    cve_lambda(l_idx) = cve_total / num_folds;
+    cve_lambda(l_idx) = cve_total / num_folds ;
     fprintf('Lambda %e, CVE: %f\n', lambda, cve_lambda(l_idx));
 end
 
@@ -108,7 +108,7 @@ semilogx(optimal_lambda, cve_lambda(min_idx), 'ro', 'MarkerSize', 10, 'LineWidth
 
 % 최적 \(\lambda\) 텍스트 추가
 optimal_lambda_str = ['Optimal \lambda = ', num2str(optimal_lambda, '%.2e')];
-ylim([19.7243, 19.7245]);
+%ylim([19.7263, 19.7275]);
 
 % 레이블 및 제목
 xlabel('\lambda (Regularization Parameter)');
@@ -123,71 +123,6 @@ hold off;
 
 %% 최적의 람다로 전체 데이터로 gamma 및 R0 추정
 [gamma_optimal, R0_optimal] = estimate_gamma(optimal_lambda, 1:num_cycles, ik_all, V_sd_all, SOC_all, soc_values, ocv_values, tau_discrete, delta_theta, L_aug);
-
-%% 결과 플롯
-% Gamma(SOC, Theta) 3D 그래프 생성
-
-% 각 사이클의 중간 SOC 계산 (중간 시간에 해당하는 SOC)
-soc_mid_all = zeros(num_cycles, 1);
-for s = 1:num_cycles
-    t = t_all{s};
-    SOC = SOC_all{s};
-    t_mid = t(end) / 2;
-    soc_mid_all(s) = interp1(t, SOC, t_mid, 'linear', 'extrap');
-end
-
-% Gamma 값을 사이클별로 저장
-gamma_est_all = zeros(num_cycles, n);
-for s = 1:num_cycles
-    gamma_est_all(s, :) = gamma_optimal(:, s)';
-end
-
-% SOC와 Theta에 대한 그리드 생성
-[soc_sorted, sort_idx] = sort(soc_mid_all);
-gamma_sorted = gamma_est_all(sort_idx, :);
-
-[SOC_grid, Theta_grid] = meshgrid(soc_sorted, theta_discrete);
-Gamma_grid = gamma_sorted';
-
-% 3D 서피스 플롯 생성
-figure;
-surf(SOC_grid, Theta_grid, Gamma_grid, 'EdgeColor', 'none');
-xlabel('SOC');
-ylabel('\theta = ln(\tau)');
-zlabel('\gamma');
-title(['Gamma(SOC, \theta) with Optimal \lambda = ', num2str(optimal_lambda, '%.2e')]);
-colorbar;
-view(135, 30);  % 시점 조정
-grid on;
-
-%% 전압 비교 그래프 (선택 사항)
-% 전체 사이클에 대해 측정된 전압과 추정된 전압 비교
-for s = 1:num_cycles
-    t = t_all{s};
-    ik = ik_all{s};
-    V_sd = V_sd_all{s};
-    SOC = SOC_all{s};
-    
-    % OCV 계산
-    ocv_over_time = interp1(soc_values, ocv_values, SOC, 'linear', 'extrap');
-    
-    % 추정된 전압 계산
-    gamma_est = gamma_optimal(:, s);
-    R0_est = R0_optimal(s);
-    V_est = predict_voltage(gamma_est, R0_est, ik, SOC, soc_values, ocv_values, tau_discrete, delta_theta);
-    
-    % 전압 비교 그래프 출력
-    figure(100 + s);  % 그래프 번호를 사이클에 따라 다르게 설정
-    plot(t, V_sd, 'b', 'LineWidth', 1);
-    hold on;
-    plot(t, V_est, 'r--', 'LineWidth', 1);
-    xlabel('Time (s)');
-    ylabel('Voltage (V)');
-    title(['Voltage Comparison for Cycle ', num2str(s)]);
-    legend('Measured V_{sd}', 'Estimated V_{est}');
-    grid on;
-    hold off;
-end
 
 %% 함수 정의
 
@@ -268,7 +203,7 @@ function error_total = calculate_error(gamma_estimated, R0_estimated, val_scenar
         SOC = SOC_all{s};
         
         % OCV 계산
-        ocv_over_time = interp1(soc_values, ocv_values, SOC, 'linear', 'extrap');
+        %ocv_over_time = interp1(soc_values, ocv_values, SOC, 'linear', 'extrap');
         
         % 추정된 전압 계산
         gamma_est = mean(gamma_estimated, 2);  % 학습 세트의 평균 gamma 사용
@@ -337,4 +272,4 @@ function V_est = predict_voltage(gamma_est, R0_est, ik, SOC, soc_values, ocv_val
         end
         V_est(k_idx) = ocv_over_time(k_idx) + R0_est * ik(k_idx) + sum(V_RC(:, k_idx));
     end
-end
+end 
