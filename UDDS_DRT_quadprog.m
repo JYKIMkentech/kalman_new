@@ -63,6 +63,11 @@ for s = 1:num_trips-1  % 마지막 트립은 데이터가 짧으므로 제외
     
     soc_mid_all(s) = interp1(t_unique, SOC_unique, t_mid, 'linear', 'extrap');  % 중간 시간에 해당하는 SOC
     
+    % SOC가 0에서 1 사이인지 확인 및 정규화
+    if max(soc_mid_all(s)) > 1
+        soc_mid_all(s) = soc_mid_all(s) / 100;
+    end
+    
     % 시간 간격 dt 계산
     delta_t = [0; diff(t)];
     dt = delta_t;
@@ -142,6 +147,7 @@ for s = 1:num_trips-1  % 마지막 트립은 데이터가 짧으므로 제외
     end
     
     %% 4.5 DRT Gamma 그래프 출력
+    % 4.5 DRT Gamma 그래프 출력
     figure(1);
     subplot(4, 4, s);
     plot(theta_discrete, gamma_est, 'LineWidth', 1.5);
@@ -150,6 +156,14 @@ for s = 1:num_trips-1  % 마지막 트립은 데이터가 짧으므로 제외
     title(['DRT for Trip ', num2str(s)]);
     grid on;
     
+    % Add R0 estimate as text annotation with scientific notation
+    % Add R0 estimate as text annotation in the top-left corner
+    x_text = min(theta_discrete);  % Set to the leftmost part of the x-axis
+    y_text = max(gamma_est);       % Set to the top part of the y-axis
+    text(x_text, y_text, sprintf('R₀ = %.3e Ω', R0_est_all(s)), ...
+        'FontSize', 8, 'Color', 'k', 'FontWeight', 'bold', 'HorizontalAlignment', 'left', 'VerticalAlignment', 'top');
+
+
     %% 4.6 전압 비교 그래프 출력
     figure(2);
     subplot(4, 4, s);
@@ -163,7 +177,6 @@ for s = 1:num_trips-1  % 마지막 트립은 데이터가 짧으므로 제외
     grid on;
     hold off;
 end
-
 
 %% 5. Gamma(SOC, Theta) 3D 그래프 생성
 % 각 트립의 SOC 중간값에 해당하는 Gamma 값을 3차원으로 배열
@@ -180,24 +193,63 @@ gamma_sorted = gamma_est_all(sort_idx, :);
 % Gamma 값을 전치하여 (n x num_trips-1) 행렬로 설정
 Gamma_grid = gamma_sorted';
 
-% 3D 서피스 플롯 생성
+% 3D 서피스 플롯 생성 (색상 매핑 추가)
+% 3D 서피스 플롯 생성 (색상 매핑 추가)
 figure(3);
-surf_handle = surf(SOC_grid, Theta_grid, Gamma_grid, ...
-                  'FaceColor', 'blue', ...      % 단일 색상 지정
-                  'EdgeColor', 'none');         % 테두리 색상 제거
+surf_handle = surf(SOC_grid, Theta_grid, Gamma_grid);  
 xlabel('SOC');
 ylabel('\theta = ln(\tau [s] )');
 zlabel('γ [Ω /s]');
 title('Gamma(SOC, \theta) 3D Surface Plot');
-% colorbar;  % 색상 매핑이 없으므로 필요 없을 수 있음
-view(135, 30);  % 시점 조정
+colormap(jet);    % 원하는 컬러맵 설정
+c = colorbar;     % colorbar 핸들을 저장
+c.Label.String = 'Gamma [Ω/s]';  % colorbar 라벨 설정
+view(135, 30);    % 시각화 각도 조정
 grid on;
 
-% 추가: 투명도 설정 (선택 사항)
 alpha(0.8);
-
-% 축의 방향을 맞추기 위해 X축과 Y축을 조정
 axis tight;
+
+% SOC 축을 0에서 1 사이로 설정
+xlim([0 1]);
+
+%% 5.2 개별 트립에 대한 3D 라인 플롯 생성
+figure(4);
+hold on;  
+
+% 컬러맵과 색상 인덱스 설정
+cmap = jet;  % 사용할 컬러맵
+num_colors = size(cmap, 1);
+soc_min = min(soc_mid_all);
+soc_max = max(soc_mid_all);
+
+for s = 1:num_trips-1
+    % SOC 값을 컬러맵의 색상 인덱스로 매핑
+    color_idx = round((soc_mid_all(s) - soc_min) / (soc_max - soc_min) * (num_colors - 1)) + 1;
+    color_idx = max(1, min(num_colors, color_idx));  % 인덱스 범위 제한
+    plot3(repmat(soc_mid_all(s), size(theta_discrete)), theta_discrete, gamma_est_all(s, :), 'LineWidth', 1.5, 'Color', cmap(color_idx, :));
+end
+
+xlabel('SOC');
+ylabel('\theta = ln(\tau) [s]');
+zlabel('\gamma [Ω/s]');
+title('Stacked 3D DRT for Different SOC Levels');
+grid on;
+view(135, 30);  
+
+colormap(jet);  
+c = colorbar;       % colorbar 핸들을 저장
+c.Label.String = 'SOC ';  % colorbar 라벨 설정
+caxis([soc_min soc_max]);  % 컬러바 범위를 SOC 범위로 설정
+
+% SOC 축을 0에서 1 사이로 설정
+xlim([0 1]);
+
+hold off;
+
+
+
+
 
 %% save
 
