@@ -9,7 +9,7 @@ load('AS1.mat');  % 첫 번째 코드에서 저장한 A, T, ik_scenarios, t 변�
 n = 201;  % Number of discrete elements
 dt = t(2) - t(1);  % Time step based on loaded time vector
 num_scenarios = 10;  % Number of current scenarios
-lambda = 0.153;  % Regularization parameter
+lambda = 0.153;  % Regularization parameter (주어진 람다 값)
 
 %% DRT 
 
@@ -19,8 +19,8 @@ mu_theta1 = log(10);     % 첫 번째 피크의 중심 위치
 sigma_theta1 = 1;        % 첫 번째 피크의 폭
 
 % 두 번째 피크의 평균과 표준편차
-mu_theta2 = log(100);    % 두 번째 피크의 중심 위치
-sigma_theta2 = 0.5;      % 두 번째 피크의 폭
+mu_theta2 = log(120);    % 두 번째 피크의 중심 위치
+sigma_theta2 = 0.7;      % 두 번째 피크의 폭
 
 % Theta 범위 설정 (두 피크를 모두 포함하도록)
 theta_min = min([mu_theta1, mu_theta2]) - 3 * max([sigma_theta1, sigma_theta2]);
@@ -51,6 +51,7 @@ V_est_all = zeros(num_scenarios, length(t));  % For storing V_est for all scenar
 V_sd_all = zeros(num_scenarios, length(t));   % For storing V_sd for all scenarios
 
 %% First-order difference matrix L
+% 여기서는 1차 차분 행렬을 사용합니다.
 L = zeros(n-1, n);
 for i = 1:n-1
     L(i, i) = -1;
@@ -58,6 +59,12 @@ for i = 1:n-1
 end
 
 %% Voltage Synthesis and DRT Estimation
+R0 = 0.1;  % Ohmic resistance
+OCV = 0;   % Open Circuit Voltage
+
+rng(0);  % Ensure reproducibility of noise
+noise_level = 0.01;  % 노이즈 수준 설정
+
 for s = 1:num_scenarios
     fprintf('Processing Scenario %d/%d...\n', s, num_scenarios);
     
@@ -66,8 +73,6 @@ for s = 1:num_scenarios
     
     %% Initialize Voltage
     V_est = zeros(1, length(t));  % Model voltage calculated via n-element model
-    R0 = 0.1;  % Ohmic resistance
-    OCV = 0;   % Open Circuit Voltage
     V_RC = zeros(n, length(t));  % Voltages for each element
     
     %% Voltage Calculation
@@ -89,8 +94,6 @@ for s = 1:num_scenarios
     V_est_all(s, :) = V_est;  % Save the calculated V_est for this scenario
     
     %% Add Noise to the Voltage
-    rng(0);  % Ensure reproducibility of noise
-    noise_level = 0.01;
     V_sd = V_est + noise_level * randn(size(V_est));  % V_sd = synthetic measured voltage
     
     % Store V_sd for the current scenario
@@ -141,6 +144,7 @@ for s = 1:num_scenarios
     gamma_analytical_all(s, :) = gamma_quadprog';
     
     %% Plot Voltage and DRT Comparison
+    % Voltage Plot
     figure(1);  
     subplot(5, 2, s);
     yyaxis left
@@ -180,19 +184,9 @@ for s = 1:num_scenarios
     grid on;
 end
 
-% 최종적으로 모든 DRT 비교 플롯을 하나의 figure에 모으려면 다음과 같이 추가할 수 있습니다:
-figure;
-for s = 1:num_scenarios
-    subplot(5, 2, s);
-    hold on;
-    plot(theta_discrete, gamma_discrete_true, 'k-', 'LineWidth', 1.5, 'DisplayName', 'True \gamma');
-    plot(theta_discrete, gamma_analytical_all(s, :), ':', 'Color', 'g', 'LineWidth', 1.5, 'DisplayName', 'Estimated \gamma (quadprog)');
-    hold off;
-    xlabel('\theta = ln(\tau)');
-    ylabel('\gamma');
-    title(['DRT Comparison for Scenario ', num2str(s)]);
-    legend('Location', 'Best');
-    grid on;
-end
-sgtitle('DRT Comparison for All Scenarios');
+
+% 현재 시나리오의 A와 T 값 출력
+fprintf('Scenario %d Parameters:\n', s);
+fprintf('A1=%.3f, A2=%.3f, A3=%.3f\n', A(s,1), A(s,2), A(s,3));
+fprintf('T1=%.3f, T2=%.3f, T3=%.3f\n', T(s,1), T(s,2), T(s,3));
 

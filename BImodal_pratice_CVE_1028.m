@@ -19,8 +19,8 @@ mu_theta1 = log(10);     % 첫 번째 피크의 중심 위치
 sigma_theta1 = 1;        % 첫 번째 피크의 폭
 
 % 두 번째 피크의 평균과 표준편차
-mu_theta2 = log(100);    % 두 번째 피크의 중심 위치
-sigma_theta2 = 0.5;      % 두 번째 피크의 폭
+mu_theta2 = log(120);    % 두 번째 피크의 중심 위치
+sigma_theta2 = 0.7;      % 두 번째 피크의 폭
 
 % Theta 범위 설정 (두 피크를 모두 포함하도록)
 theta_min = min([mu_theta1, mu_theta2]) - 3 * max([sigma_theta1, sigma_theta2]);
@@ -149,6 +149,7 @@ semilogx(optimal_lambda, cve_lambda(min_idx), 'ro', 'MarkerSize', 10, 'LineWidth
 
 % 최적 \(\lambda\) 텍스트 추가
 optimal_lambda_str = ['Optimal \lambda = ', num2str(optimal_lambda, '%.2e')];
+ylim([1.98322, 1.98324]);
 
 % 레이블 및 제목
 xlabel('\lambda (Regularization Parameter)');
