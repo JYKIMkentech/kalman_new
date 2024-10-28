@@ -1,4 +1,3 @@
-
 %% 2. AS1.mat 파일 로드 및 DRT 분석 수행
 
 clc; clear; close all;
@@ -112,15 +111,34 @@ for s = 1:num_scenarios
         end
     end
     
-    %% Analytical Solution with Regularization
+    %% 감마 추정: quadprog를 이용하여 제약 조건 \(\gamma \geq 0\) 적용
     % Remove constants: Subtract OCV and R0*ik
     y_adjusted = V_sd' - OCV - R0 * ik';
     
-    % Regularized least squares solution
-    gamma_analytical = (W' * W + lambda * (L' * L)) \ (W' * y_adjusted);
+    % Define H and f for quadprog
+    H = W' * W + lambda * (L' * L);
+    f = -W' * y_adjusted;
     
-    %% Store Analytical gamma
-    gamma_analytical_all(s, :) = gamma_analytical';
+    % H를 대칭 행렬로 보정
+    H = (H + H') / 2;
+    
+    % 제약 조건 설정: gamma >= 0
+    lb = zeros(n, 1);  % 하한: 0
+    ub = [];           % 상한: 없음
+    
+    % quadprog 옵션 설정
+    options = optimoptions('quadprog', 'Display', 'off');
+    
+    % quadprog를 이용하여 최적화 문제 해결
+    [gamma_quadprog, ~, exitflag] = quadprog(H, f, [], [], [], [], lb, ub, [], options);
+    
+    % 최적화 실패 시 경고 메시지 출력
+    if exitflag ~= 1
+        warning('quadprog did not converge for scenario %d', s);
+    end
+    
+    %% 추정된 감마 저장
+    gamma_analytical_all(s, :) = gamma_quadprog';
     
     %% Plot Voltage and DRT Comparison
     figure(1);  
@@ -151,8 +169,8 @@ for s = 1:num_scenarios
     % Plot True gamma
     plot(theta_discrete, gamma_discrete_true, 'k-', 'LineWidth', 1.5, 'DisplayName', 'True \gamma');
     
-    % Plot Analytical gamma
-    plot(theta_discrete, gamma_analytical_all(s, :), ':', 'Color', 'g', 'LineWidth', 1.5, 'DisplayName', 'Analytical \gamma');
+    % Plot Estimated gamma from quadprog
+    plot(theta_discrete, gamma_analytical_all(s, :), ':', 'Color', 'g', 'LineWidth', 1.5, 'DisplayName', 'Estimated \gamma (quadprog)');
     
     hold off;
     xlabel('\theta = ln(\tau)');
@@ -168,7 +186,7 @@ for s = 1:num_scenarios
     subplot(5, 2, s);
     hold on;
     plot(theta_discrete, gamma_discrete_true, 'k-', 'LineWidth', 1.5, 'DisplayName', 'True \gamma');
-    plot(theta_discrete, gamma_analytical_all(s, :), ':', 'Color', 'g', 'LineWidth', 1.5, 'DisplayName', 'Analytical \gamma');
+    plot(theta_discrete, gamma_analytical_all(s, :), ':', 'Color', 'g', 'LineWidth', 1.5, 'DisplayName', 'Estimated \gamma (quadprog)');
     hold off;
     xlabel('\theta = ln(\tau)');
     ylabel('\gamma');
