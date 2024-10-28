@@ -12,7 +12,7 @@ tau_discrete = exp(theta_discrete);
 load('udds_data.mat');  % 'udds_data' 구조체를 로드합니다.
 
 %% 3. 칼만 필터를 적용할 사이클 선택
-cycle_idx = 1;  % 원하는 사이클 번호로 변경 가능
+cycle_idx = 2;  % 원하는 사이클 번호로 변경 가능
 if cycle_idx > length(udds_data)
     error('선택한 사이클 번호가 데이터 범위를 벗어났습니다.');
 end
@@ -212,4 +212,23 @@ xlabel('시간 (s)');
 ylabel('잔차 (V)');
 title('측정 전압과 추정 전압의 잔차');
 grid on;
+
+%%save
+
+% DRT 기반 칼만 필터 코드에서 첫 번째 트립 처리 후에 추가
+
+% SOC_estimated: 칼만 필터로 추정된 SOC (이미 코드에서 사용됨)
+% time: 시간 벡터 (이미 코드에서 사용됨)
+
+% 첫 번째 트립의 결과를 저장
+DRT_SOC_est = SOC_estimated;  % 추정된 SOC
+DRT_Time = time;              % 시간 벡터
+
+% 결과 저장
+save('DRT_SOC_trip1.mat', 'DRT_SOC_est', 'DRT_Time');
+
+
+
+
+
 

@@ -3,7 +3,7 @@ clc; clear; close all;
 
 % 데이터 로드
 %data = load('C:\Users\USER\Desktop\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\5 pulse disch\03-11-17_08.47 25degC_5Pulse_HPPC_Pan18650PF.mat');
-data = load('C:\Users\USER\Desktop\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\5 pulse disch\03-11-17_08.47 25degC_5Pulse_HPPC_Pan18650PF.mat');
+data = load('G:\공유 드라이브\BSL_Data3\HPPC0\03-11-17_08.47 25degC_5Pulse_HPPC_Pan18650PF.mat');
 % 시간, 전압, 전류 데이터 추출
 
 time = data.meas.Time;

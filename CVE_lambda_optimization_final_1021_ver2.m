@@ -6,7 +6,7 @@ clc; clear; close all;
 load('AS1.mat');  % Load A, T, ik_scenarios, t variables
 
 %% Parameters 
-n = 40;  % Number of discrete elements
+n = 201;  % Number of discrete elements
 dt = t(2) - t(1);  % Time step based on loaded time vector
 num_scenarios = 10;  % Number of current scenarios
 lambda_values = logspace(-4, 9, 50);  % 람다 값 범위 설정

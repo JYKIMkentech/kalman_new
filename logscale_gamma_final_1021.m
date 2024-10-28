@@ -4,7 +4,7 @@ clc; clear; close all;
 load('AS1.mat');  % 첫 번째 코드에서 저장한 A, T, ik_scenarios, t 변수를 불러옵니다.
 
 %% Parameters 
-n = 40;  % Number of discrete elements
+n = 201;  % Number of discrete elements
 dt = t(2) - t(1);  % Time step based on loaded time vector
 num_scenarios = 10;  % Number of current scenarios
 lambda = 0.51795;  % Regularization parameter

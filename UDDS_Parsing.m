@@ -17,14 +17,39 @@ ocv_values = soc_ocv(:, 2);  % OCV 값
 % 초기 SOC 설정
 SOC_initial = 0.9901;  % 초기 SOC를 설정합니다.
 
-% 전류 데이터의 시간 간격(delta_t) 계산
-delta_t = [0; diff(udds_time)];  % 각 측정 사이의 시간 간격
-
 % 배터리 용량 (Ah를 Coulomb로 변환)
 Q_battery = 2.9 * 3600;  % 배터리 용량 (2.9Ah)
 
-% 시간에 따른 SOC 계산
-udds_SOC = SOC_initial + cumsum(udds_current .* delta_t) / Q_battery;
+% 시간에 따른 SOC 계산 (trapz를 사용하여 전류 적분)
+udds_SOC = zeros(size(udds_time));
+udds_SOC(1) = SOC_initial;
+
+% Waitbar 생성
+hWait = waitbar(0, 'SOC 계산 중...', 'Name', 'SOC 계산 진행상황');
+
+% 진행 업데이트를 위한 단계 설정 (예: 1%)
+update_step = floor(length(udds_time) / 100);
+if update_step < 1
+    update_step = 1;
+end
+
+for i = 2:length(udds_time)
+    % 현재까지의 전류 적분값 계산
+    integrated_current = trapz(udds_time(1:i), udds_current(1:i));
+    
+    % SOC 계산
+    udds_SOC(i) = SOC_initial + integrated_current / Q_battery;
+    
+    % 진행률 계산 및 waitbar 업데이트
+    if mod(i, update_step) == 0 || i == length(udds_time)
+        progress = i / length(udds_time);
+        waitbar(progress, hWait, sprintf('SOC 계산 중... %.2f%% 완료', progress * 100));
+    end
+end
+
+% Waitbar 닫기
+close(hWait);
+
 
 %% 4. UDDS 트립 시작점과 끝점 탐지 (Sequential Approach)
 % 초기 설정

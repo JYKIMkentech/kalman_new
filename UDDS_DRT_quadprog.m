@@ -63,11 +63,7 @@ for s = 1:num_trips-1  % 마지막 트립은 데이터가 짧으므로 제외
     
     soc_mid_all(s) = interp1(t_unique, SOC_unique, t_mid, 'linear', 'extrap');  % 중간 시간에 해당하는 SOC
     
-    % SOC가 0에서 1 사이인지 확인 및 정규화
-    if max(soc_mid_all(s)) > 1
-        soc_mid_all(s) = soc_mid_all(s) / 100;
-    end
-    
+   
     % 시간 간격 dt 계산
     delta_t = [0; diff(t)];
     dt = delta_t;
