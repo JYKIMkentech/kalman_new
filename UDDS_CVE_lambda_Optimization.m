@@ -11,7 +11,7 @@ soc_values = soc_ocv(:, 1);  % SOC 값
 ocv_values = soc_ocv(:, 2);  % OCV 값
 
 %% 3. DRT 추정에 필요한 파라미터 설정
-n = 40;  % 이산 요소의 개수
+n = 201;  % 이산 요소의 개수
 tau_min = 0.1;     % 최소 시간 상수 (초)
 tau_max = 1100;    % 최대 시간 상수 (초)
 

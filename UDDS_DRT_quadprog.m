@@ -11,7 +11,7 @@ soc_values = soc_ocv(:, 1);  % SOC 값
 ocv_values = soc_ocv(:, 2);  % OCV 값
 
 %% 3. DRT 추정에 필요한 파라미터 설정
-n = 40;  % 이산 요소의 개수
+n = 201;  % 이산 요소의 개수
 tau_min = 0.1;     % 최소 시간 상수 (초)
 tau_max = 1100;    % 최대 시간 상수 (초)
 
@@ -25,7 +25,7 @@ tau_discrete = exp(theta_discrete);
 delta_theta = theta_discrete(2) - theta_discrete(1);
 
 % 정규화 파라미터
-lambda = 0.204;  % 필요에 따라 조정 가능
+lambda = 0.204; 
 
 % Gamma에 대한 1차 차분 행렬 L_gamma 생성
 L_gamma = zeros(n-1, n);
@@ -210,38 +210,50 @@ axis tight;
 xlim([0 1]);
 
 %% 5.2 개별 트립에 대한 3D 라인 플롯 생성
+% Set the z threshold
+z_threshold = 0.25;
+
 figure(4);
 hold on;  
 
-% 컬러맵과 색상 인덱스 설정
-cmap = jet;  % 사용할 컬러맵
+% Use colormap and color index as before
+cmap = jet;  % 컬러맵 설정
 num_colors = size(cmap, 1);
 soc_min = min(soc_mid_all);
 soc_max = max(soc_mid_all);
 
 for s = 1:num_trips-1
-    % SOC 값을 컬러맵의 색상 인덱스로 매핑
+    % Map SOC to colormap
     color_idx = round((soc_mid_all(s) - soc_min) / (soc_max - soc_min) * (num_colors - 1)) + 1;
     color_idx = max(1, min(num_colors, color_idx));  % 인덱스 범위 제한
-    plot3(repmat(soc_mid_all(s), size(theta_discrete)), theta_discrete, gamma_est_all(s, :), 'LineWidth', 1.5, 'Color', cmap(color_idx, :));
+    
+    % Apply z threshold filter
+    gamma_data_filtered = gamma_est_all(s, :);
+    gamma_data_filtered(gamma_data_filtered > z_threshold) = NaN;  % Filter values above threshold
+    
+    % Plot filtered data
+    plot3(repmat(soc_mid_all(s), size(theta_discrete)), theta_discrete, gamma_data_filtered, ...
+          'LineWidth', 1.5, 'Color', cmap(color_idx, :));
 end
 
 xlabel('SOC');
 ylabel('\theta = ln(\tau) [s]');
 zlabel('\gamma [Ω/s]');
-title('Stacked 3D DRT for Different SOC Levels');
+title('Stacked 3D DRT for Different SOC Levels (Limited z)');
 grid on;
-view(135, 30);  
+view(135, 30);
 
 colormap(jet);  
-c = colorbar;       % colorbar 핸들을 저장
-c.Label.String = 'SOC ';  % colorbar 라벨 설정
-caxis([soc_min soc_max]);  % 컬러바 범위를 SOC 범위로 설정
+c = colorbar;  % Colorbar 설정
+c.Label.String = 'SOC ';  % Colorbar 라벨 설정
+caxis([soc_min soc_max]);  % Colorbar 범위를 SOC 범위로 설정
 
-% SOC 축을 0에서 1 사이로 설정
+% SOC axis setting
 xlim([0 1]);
+zlim([0, z_threshold]);  % z axis limit to 0.4
 
 hold off;
+
 
 
 
