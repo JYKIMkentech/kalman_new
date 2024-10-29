@@ -63,7 +63,7 @@ for s = 1:num_trips-1  % 마지막 트립은 데이터가 짧으므로 제외
     
     soc_mid_all(s) = interp1(t_unique, SOC_unique, t_mid, 'linear', 'extrap');  % 중간 시간에 해당하는 SOC
     
-   
+    
     % 시간 간격 dt 계산
     delta_t = [0; diff(t)];
     dt = delta_t;
@@ -160,18 +160,27 @@ for s = 1:num_trips-1  % 마지막 트립은 데이터가 짧으므로 제외
         'FontSize', 8, 'Color', 'k', 'FontWeight', 'bold', 'HorizontalAlignment', 'left', 'VerticalAlignment', 'top');
 
 
-    %% 4.6 전압 비교 그래프 출력
+ %% 4.6 전압 비교 그래프 출력 (전류 프로파일 추가 및 레이블 색상 변경)
     figure(2);
     subplot(4, 4, s);
-    plot(t, V_sd, 'b', 'LineWidth', 1);
+    yyaxis left  % 왼쪽 Y축 활성화 (전압)
+    plot(t, V_sd, 'b', 'LineWidth', 1, 'DisplayName', 'Measured V_{udds}');
     hold on;
-    plot(t, V_est, 'r--', 'LineWidth', 1);
+    plot(t, V_est, 'r--', 'LineWidth', 1, 'DisplayName', 'Estimated V_{est}');
     xlabel('Time (s)');
-    ylabel('Voltage (V)');
-    title(['Voltage Comparison for Trip ', num2str(s)]);
-    legend('Measured V_{sd}', 'Estimated V_{est}');
+    ylabel('Voltage (V)', 'Color', 'k');  % 왼쪽 Y축 레이블 색상 설정 (검정색)
+    title(['Voltage and Current Comparison for Trip ', num2str(s)]);
+    legend('Location', 'best');
     grid on;
+    
+    yyaxis right  % 오른쪽 Y축 활성화 (전류)
+    plot(t, ik, 'g', 'LineWidth', 1, 'DisplayName', 'Current ');
+    ylabel('Current (A)', 'Color', 'g');  % 오른쪽 Y축 레이블 색상을 초록색으로 설정
+    set(gca, 'YColor', 'g');  % 오른쪽 Y축의 눈금 및 값 색상을 초록색으로 설정
+    legend('Location', 'best');
     hold off;
+
+
 end
 
 %% 5. Gamma(SOC, Theta) 3D 그래프 생성
@@ -189,7 +198,6 @@ gamma_sorted = gamma_est_all(sort_idx, :);
 % Gamma 값을 전치하여 (n x num_trips-1) 행렬로 설정
 Gamma_grid = gamma_sorted';
 
-% 3D 서피스 플롯 생성 (색상 매핑 추가)
 % 3D 서피스 플롯 생성 (색상 매핑 추가)
 figure(3);
 surf_handle = surf(SOC_grid, Theta_grid, Gamma_grid);  
@@ -238,7 +246,7 @@ end
 
 xlabel('SOC');
 ylabel('\theta = ln(\tau) [s]');
-zlabel('\gamma [Ω/s]');
+zlabel('\gamma [Ω]');
 title('Stacked 3D DRT for Different SOC Levels (Limited z)');
 grid on;
 view(135, 30);
@@ -250,18 +258,12 @@ caxis([soc_min soc_max]);  % Colorbar 범위를 SOC 범위로 설정
 
 % SOC axis setting
 xlim([0 1]);
-zlim([0, z_threshold]);  % z axis limit to 0.4
+zlim([0, z_threshold]);  % z axis limit to 0.25
 
 hold off;
-
-
-
-
-
 
 %% save
 
 save('gamma_data.mat', 'gamma_sorted', 'soc_sorted', 'theta_discrete', 'R0_est_all', 'soc_mid_all');
 save('soc_ocv_data.mat', 'soc_values', 'ocv_values');
-
 

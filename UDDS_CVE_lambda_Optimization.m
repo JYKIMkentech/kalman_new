@@ -25,7 +25,7 @@ tau_discrete = exp(theta_discrete);
 delta_theta = theta_discrete(2) - theta_discrete(1);
 
 % 정규화 파라미터 람다 값 범위 설정
-lambda_values = logspace(-4, 3 , 10);  % 필요에 따라 조정 가능
+lambda_values = logspace(-14, -4 , 10);  % 필요에 따라 조정 가능
 
 % Gamma에 대한 1차 차분 행렬 L_gamma 생성
 L_gamma = zeros(n-1, n);
@@ -38,7 +38,7 @@ end
 L_aug = [L_gamma, zeros(n-1, 1)];
 
 %% 4. 각 사이클의 데이터 준비
-num_cycles = length(udds_data)-3;
+num_cycles = length(udds_data)-1;
 
 % 사이클별 데이터 저장을 위한 셀 배열 초기화
 t_all = cell(num_cycles, 1);
