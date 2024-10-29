@@ -3,7 +3,7 @@ clc; clear; close all;
 
 % 데이터 로드
 %data = load('C:\Users\USER\Desktop\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\5 pulse disch\03-11-17_08.47 25degC_5Pulse_HPPC_Pan18650PF.mat');
-data = load('G:\공유 드라이브\BSL_Data3\HPPC0\03-11-17_08.47 25degC_5Pulse_HPPC_Pan18650PF.mat');
+data = load('G:\공유 드라이브\BSL_Data3\HPPC\03-11-17_08.47 25degC_5Pulse_HPPC_Pan18650PF.mat');
 % 시간, 전압, 전류 데이터 추출
 
 time = data.meas.Time;
@@ -193,7 +193,7 @@ for i = 1:length(step_dis)
     % m의 최대값을 1.5로 제한
     %m = min(m, 1.5);
 
-    m = 1.05;
+    m = 1.5;
 
 
     % 스텝의 시간 길이 확인
@@ -401,4 +401,3 @@ end
 function voltage = model_func(time, R0, R1, C, I)
     voltage = I * (R0 + R1 * (1 - exp(-time / (R1 * C))));
 end
-

@@ -180,6 +180,48 @@ for s = 1:num_trips-1  % 마지막 트립은 데이터가 짧으므로 제외
     legend('Location', 'best');
     hold off;
 
+    %% 4.7 Trip 1에 대한 별도의 Gamma 그래프 추가
+    % Trip 1의 gamma 그래프를 별도의 큰 그림으로 플롯합니다.
+    figure(5);  % 새로운 figure 생성
+    set(gcf, 'Position', [100, 100, 800, 600]);  % Figure 크기 조정 (가로:800, 세로:600)
+    plot(theta_discrete, gamma_est_all(1, :), 'LineWidth', 2, 'Color', 'b');
+    xlabel('\theta = ln(\tau)', 'FontSize', 14);
+    ylabel('\gamma [\Omega/s]', 'FontSize', 14);
+    title('DRT Gamma for Trip 1', 'FontSize', 16);
+    grid on;
+    hold on;
+    
+    % R0 추정값을 그래프에 텍스트로 추가
+    text(min(theta_discrete), max(gamma_est_all(1, :)), sprintf('R₀ = %.3e Ω', R0_est_all(1)), ...
+        'FontSize', 12, 'Color', 'k', 'FontWeight', 'bold', 'HorizontalAlignment', 'left', 'VerticalAlignment', 'top');
+    
+    hold off;
+    
+    %% 4.8 Trip 1에 대한 I, V, V_model vs t 그래프 추가
+    if s == 1
+        figure(6);  % 새로운 figure 생성
+        set(gcf, 'Position', [150, 150, 800, 600]);  % Figure 크기 조정 (가로:800, 세로:600)
+        
+        % 왼쪽 Y축: Voltage (V_sd 및 V_est)
+        yyaxis left
+        plot(t, V_sd, 'b', 'LineWidth', 1.5, 'DisplayName', 'Measured V_{udds}');
+        hold on;
+        plot(t, V_est, 'r--', 'LineWidth', 1.5, 'DisplayName', 'Estimated V_{est}');
+        ylabel('Voltage (V)', 'FontSize', 12, 'Color', 'k');
+        grid on;
+        
+        % 오른쪽 Y축: Current (ik)
+        yyaxis right
+        plot(t, ik, 'g', 'LineWidth', 1.5, 'DisplayName', 'Current (A)');
+        ylabel('Current (A)', 'FontSize', 12, 'Color', 'g');
+        set(gca, 'YColor', 'g');  % 오른쪽 Y축의 눈금 및 값 색상을 초록색으로 설정
+        
+        % 축 및 제목 설정
+        xlabel('Time (s)', 'FontSize', 12);
+        title('I, V, V_{model} vs Time for Trip 1', 'FontSize', 14);
+        legend('Location', 'best');
+        hold off;
+    end
 
 end
 
@@ -201,13 +243,13 @@ Gamma_grid = gamma_sorted';
 % 3D 서피스 플롯 생성 (색상 매핑 추가)
 figure(3);
 surf_handle = surf(SOC_grid, Theta_grid, Gamma_grid);  
-xlabel('SOC');
-ylabel('\theta = ln(\tau [s] )');
-zlabel('γ [Ω /s]');
-title('Gamma(SOC, \theta) 3D Surface Plot');
+xlabel('SOC', 'FontSize', 12);
+ylabel('\theta = ln(\tau [s])', 'FontSize', 12);
+zlabel('\gamma [\Omega/s]', 'FontSize', 12);
+title('Gamma(SOC, \theta) 3D Surface Plot', 'FontSize', 14);
 colormap(jet);    % 원하는 컬러맵 설정
 c = colorbar;     % colorbar 핸들을 저장
-c.Label.String = 'Gamma [Ω/s]';  % colorbar 라벨 설정
+c.Label.String = 'Gamma [\Omega/s]';  % colorbar 라벨 설정
 view(135, 30);    % 시각화 각도 조정
 grid on;
 
@@ -244,16 +286,16 @@ for s = 1:num_trips-1
           'LineWidth', 1.5, 'Color', cmap(color_idx, :));
 end
 
-xlabel('SOC');
-ylabel('\theta = ln(\tau) [s]');
-zlabel('\gamma [Ω]');
-title('Stacked 3D DRT for Different SOC Levels (Limited z)');
+xlabel('SOC', 'FontSize', 12);
+ylabel('\theta = ln(\tau) [s]', 'FontSize', 12);
+zlabel('\gamma [\Omega]', 'FontSize', 12);
+title('3D DRT for Different SOC Levels', 'FontSize', 14);
 grid on;
 view(135, 30);
 
 colormap(jet);  
 c = colorbar;  % Colorbar 설정
-c.Label.String = 'SOC ';  % Colorbar 라벨 설정
+c.Label.String = 'SOC';  % Colorbar 라벨 설정
 caxis([soc_min soc_max]);  % Colorbar 범위를 SOC 범위로 설정
 
 % SOC axis setting
@@ -261,6 +303,10 @@ xlim([0 1]);
 zlim([0, z_threshold]);  % z axis limit to 0.25
 
 hold off;
+
+
+
+
 
 %% save
 

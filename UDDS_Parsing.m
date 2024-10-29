@@ -50,15 +50,14 @@ end
 % Waitbar 닫기
 close(hWait);
 
-
 %% 4. UDDS 트립 시작점과 끝점 탐지 (Sequential Approach)
 % 초기 설정
 initial_trip_start_time = 0;          % 첫 트립 시작 시간 (0초)
 next_trip_duration = 1370;            % 다음 트립까지의 예상 시간 (초)
-current_at_zero = udds_current(1);     % 시간 0에서의 전류
-current_threshold = 0.001;             % 전류 유사성 임계값 (A)
-time_window = 10;                      % 목표 시간 주변의 시간 창 (초)
-total_time = udds_time(end);           % 총 시간
+current_at_zero = udds_current(1);    % 시간 0에서의 전류
+current_threshold = 0.001;            % 전류 유사성 임계값 (A)
+time_window = 10;                     % 목표 시간 주변의 시간 창 (초)
+total_time = udds_time(end);          % 총 시간
 
 % 트립 시작 인덱스를 저장할 배열 초기화 (첫 트립 시작점 포함)
 trip_start_indices = 1; % 첫 트립 시작점 (인덱스 1)
@@ -153,9 +152,8 @@ for i = 1:num_trips
     fprintf('  SOC length: %d samples\n', length(udds_data(i).SOC));
 end
 
-%% 8. Plot with Correct Legend
-
-figure;
+%% 8. Plot with Correct Legend (Current vs SOC)
+figure(1);
 hold on;
 
 % Plot Current on the left y-axis
@@ -230,6 +228,85 @@ legend(legend_handles, 'Location', 'best');
 % Finalize plot settings
 xlabel('Time (s)');
 title('UDDS Current and SOC Profile with Trip Boundaries');
+grid on;
+hold off;
+
+%% 9. Plot Current and Voltage with Trip Boundaries (Figure 2)
+figure(2);
+hold on;
+
+% Plot Current on the left y-axis
+yyaxis left
+h_current_fig2 = plot(udds_time, udds_current, 'b-', 'LineWidth', 1.5, 'DisplayName', 'Current (A)');
+ylabel('Current (A)');
+ylim([min(udds_current)-0.5, max(udds_current)+0.5]);
+
+% Plot Voltage on the right y-axis
+yyaxis right
+h_voltage_fig2 = plot(udds_time, udds_voltage, 'g-', 'LineWidth', 1.5, 'DisplayName', 'Voltage (V)');
+ylabel('Voltage (V)');
+ylim([min(udds_voltage)-0.5, max(udds_voltage)+0.5]);
+
+% Initialize arrays to store handles for trip markers and lines
+h_trip_markers_fig2 = [];
+h_trip_lines_fig2 = [];
+
+% Plot trip boundaries
+for i = 1:length(trip_start_indices)
+    x = udds_time(trip_start_indices(i));
+    y_current = udds_current(trip_start_indices(i));
+    y_voltage = udds_voltage(trip_start_indices(i));
+
+    % Plot 'ro' marker on left y-axis for Current
+    yyaxis left
+    h_marker_current_fig2 = plot(x, y_current, 'ro', 'MarkerSize', 8, 'LineWidth', 2);
+    h_trip_markers_fig2(end+1) = h_marker_current_fig2; 
+
+    % Plot 'ro' marker on right y-axis for Voltage
+    yyaxis right
+    h_marker_voltage_fig2 = plot(x, y_voltage, 'ro', 'MarkerSize', 8, 'LineWidth', 2);
+    h_trip_markers_fig2(end+1) = h_marker_voltage_fig2; 
+
+    % Plot vertical dashed line on left y-axis
+    yyaxis left
+    h_line_fig2 = plot([x x], ylim, 'k--', 'LineWidth', 1);
+    h_trip_lines_fig2(end+1) = h_line_fig2; 
+
+    % Add trip number labels
+    if i < length(trip_start_indices)
+        midpoint = (udds_time(trip_start_indices(i)) + udds_time(trip_start_indices(i+1))) / 2;
+    else
+        midpoint = udds_time(trip_start_indices(i)) + (udds_time(end) - udds_time(trip_start_indices(i))) / 2;
+    end
+
+    % Adjust label for the last trip
+    if i == length(trip_start_indices)
+        label = sprintf('Trip %.2f', i - 1 + 0.38);
+    else
+        label = sprintf('Trip %d', i);
+    end
+
+    % Add text label above the plot
+    text(midpoint, max(udds_current)+0.3, label, 'HorizontalAlignment', 'center', ...
+        'VerticalAlignment', 'bottom', 'FontWeight', 'bold');
+end
+
+% Reset to left y-axis for consistency
+yyaxis left
+
+% Create dummy plots for legend entries not directly tied to a single plot
+h_trip_marker_dummy_fig2 = plot(NaN, NaN, 'ro', 'MarkerSize', 8, 'LineWidth', 2, 'DisplayName', 'Trip Boundaries');
+h_trip_line_dummy_fig2 = plot(NaN, NaN, 'k--', 'LineWidth', 1, 'DisplayName', 'Trip Lines');
+
+% Combine all legend handles
+legend_handles_fig2 = [h_current_fig2, h_voltage_fig2, h_trip_marker_dummy_fig2, h_trip_line_dummy_fig2];
+
+% Add legend to the plot
+legend(legend_handles_fig2, 'Location', 'best');
+
+% Finalize plot settings
+xlabel('Time (s)');
+title('UDDS Current and Voltage Profile with Trip Boundaries');
 grid on;
 hold off;
 

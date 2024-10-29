@@ -44,15 +44,15 @@ F_C1 = scatteredInterpolant(SOC_param', Crate_param', C1_param', 'linear', 'near
 %% 4. 칼만 필터 설정 - HPPC
 
 % 초기 공분산 행렬 (HPPC 기반)
-P_init_HPPC = [4e-4 0;
-              0 1e-7]; % 기존 [1e-4 0; 0 1e-4]에서 증가
+P_init_HPPC = [1e-3 0;
+              0 1e-3]; % 기존 [1e-4 0; 0 1e-4]에서 증가
 
 % 프로세스 잡음 공분산 (HPPC 기반)
-Q_HPPC = [4e-14 0;
-          0 0.0016]; % 기존 [1e-4 0; 0 2.5e-5]에서 증가
+Q_HPPC = [1e-7 0;
+          0 0.1e-7]; % 기존 [1e-4 0; 0 2.5e-5]에서 증가
 
 % 측정 잡음 공분산 (HPPC 기반)
-R_HPPC = 5.25e-6; % 측정 잡음 특성에 따라 조정
+R_HPPC = 5.25e-2; % 측정 잡음 특성에 따라 조정
 
 %% 4. 칼만 필터 설정 - DRT
 
@@ -451,4 +451,37 @@ xlabel('Time [s]');
 ylabel('Current [A]');
 title('All Trips: Current Profile');
 grid on;
+
+%% 추가 figure 1029
+
+% 6.3.1. 전체 SOC 그래프 (새로운 Figure, 서브플롯 없이)
+figure('Name', 'Entire SOC Comparison', 'NumberTitle', 'off');
+plot(all_time_concat, all_SOC_true_concat * 100, 'k', 'LineWidth', 1.5, 'DisplayName', 'True SOC');
+hold on;
+plot(all_time_concat, all_SOC_HPPC_concat * 100, 'b--', 'LineWidth', 1.5, 'DisplayName', 'Estimated SOC (HPPC)');
+plot(all_time_concat, all_SOC_DRT_concat * 100, 'r--', 'LineWidth', 1.5, 'DisplayName', 'Estimated SOC (DRT)');
+xlabel('Time [s]');
+ylabel('SOC [%]');
+title('All Trips: SOC Estimation');
+legend('Location', 'best');
+grid on;
+
+% 6.3.2. 첫 번째 트립의 SOC 하락 그래프 (큰 플롯)
+figure('Name', 'Trip 1 SOC Drop', 'NumberTitle', 'off', 'Position', [100, 100, 1200, 600]); % 원하는 크기로 조정
+plot(all_time{1}, all_SOC_true{1} * 100, 'k', 'LineWidth', 2.0, 'DisplayName', 'True SOC');
+hold on;
+plot(all_time{1}, all_SOC_HPPC{1} * 100, 'b--', 'LineWidth', 2.0, 'DisplayName', 'Estimated SOC (HPPC)');
+plot(all_time{1}, all_SOC_DRT{1} * 100, 'r--', 'LineWidth', 2.0, 'DisplayName', 'Estimated SOC (DRT)');
+xlabel('Time [s]');
+ylabel('SOC [%]');
+title('Trip 1: SOC Estimation');
+legend('Location', 'best');
+grid on;
+
+
+
+
+
+
+
 
