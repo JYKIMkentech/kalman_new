@@ -1,5 +1,15 @@
 clear; clc; close all;
 
+%% 0. 폰트 크기 및 색상 매트릭스 설정
+% Font size settings
+axisFontSize = 14;      % 축의 숫자 크기
+titleFontSize = 16;     % 제목의 폰트 크기
+legendFontSize = 12;    % 범례의 폰트 크기
+labelFontSize = 14;     % xlabel 및 ylabel의 폰트 크기
+
+% Color matrix 설정
+c_mat = lines(9);  % 9개의 고유한 색상 정의
+
 %% 1. UDDS 주행 데이터 로드
 % UDDS 주행 데이터를 로드합니다.
 load('udds_data.mat');  % 'udds_data' 구조체를 로드합니다.
@@ -143,14 +153,16 @@ for s = 1:num_trips-1  % 마지막 트립은 데이터가 짧으므로 제외
     end
     
     %% 4.5 DRT Gamma 그래프 출력
-    % 4.5 DRT Gamma 그래프 출력
+    % Figure 1: DRT Gamma 서브플롯 (4x4)
     figure(1);
     subplot(4, 4, s);
-    plot(theta_discrete, gamma_est, 'LineWidth', 1.5);
-    xlabel('\theta = ln(\tau)');
-    ylabel('\gamma');
-    title(['DRT for Trip ', num2str(s)]);
-    grid on;
+    plot(theta_discrete, gamma_est, 'Color', c_mat(mod(s-1,9)+1, :), 'LineWidth', 1.5);
+    xlabel('\theta = ln(\tau)', 'FontSize', labelFontSize);
+    ylabel('\gamma', 'FontSize', labelFontSize);
+    title(['DRT for Trip ', num2str(s)], 'FontSize', titleFontSize);
+    legend({'\gamma'}, 'FontSize', legendFontSize, 'Location', 'best');
+    set(gca, 'FontSize', axisFontSize);
+    % grid on;  % 그리드 제거
     
     % Add R0 estimate as text annotation with scientific notation
     % Add R0 estimate as text annotation in the top-left corner
@@ -158,45 +170,49 @@ for s = 1:num_trips-1  % 마지막 트립은 데이터가 짧으므로 제외
     y_text = max(gamma_est);       % Set to the top part of the y-axis
     text(x_text, y_text, sprintf('R₀ = %.3e Ω', R0_est_all(s)), ...
         'FontSize', 8, 'Color', 'k', 'FontWeight', 'bold', 'HorizontalAlignment', 'left', 'VerticalAlignment', 'top');
+    
 
-
- %% 4.6 전압 비교 그래프 출력 (전류 프로파일 추가 및 레이블 색상 변경)
+%% 4.6 전압 비교 그래프 출력 (전류 프로파일 추가 및 레이블 색상 변경)
+    % Figure 2: Voltage and Current Comparison 서브플롯 (4x4)
     figure(2);
     subplot(4, 4, s);
     yyaxis left  % 왼쪽 Y축 활성화 (전압)
-    plot(t, V_sd, 'b', 'LineWidth', 1, 'DisplayName', 'Measured V_{udds}');
+    plot(t, V_sd, 'Color', c_mat(mod(s-1,9)+1, :), 'LineWidth', 1, 'DisplayName', 'Measured V_{udds}');
     hold on;
-    plot(t, V_est, 'r--', 'LineWidth', 1, 'DisplayName', 'Estimated V_{est}');
-    xlabel('Time (s)');
-    ylabel('Voltage (V)', 'Color', 'k');  % 왼쪽 Y축 레이블 색상 설정 (검정색)
-    title(['Voltage and Current Comparison for Trip ', num2str(s)]);
-    legend('Location', 'best');
-    grid on;
+    plot(t, V_est, '--', 'Color', c_mat(mod(s-1,9)+1, :), 'LineWidth', 1, 'DisplayName', 'Estimated V_{est}');
+    xlabel('Time (s)', 'FontSize', labelFontSize);
+    ylabel('Voltage (V)', 'FontSize', labelFontSize, 'Color', 'k');  % 왼쪽 Y축 레이블 색상 설정 (검정색)
+    title(['Voltage and Current Comparison for Trip ', num2str(s)], 'FontSize', titleFontSize);
+    legend('Location', 'best', 'FontSize', legendFontSize);
     
     yyaxis right  % 오른쪽 Y축 활성화 (전류)
-    plot(t, ik, 'g', 'LineWidth', 1, 'DisplayName', 'Current ');
-    ylabel('Current (A)', 'Color', 'g');  % 오른쪽 Y축 레이블 색상을 초록색으로 설정
+    plot(t, ik, 'Color', c_mat(mod(s-1,9)+1, :), 'LineWidth', 1, 'DisplayName', 'Current (A)');
+    ylabel('Current (A)', 'FontSize', labelFontSize, 'Color', 'g');  % 오른쪽 Y축 레이블 색상을 초록색으로 설정
     set(gca, 'YColor', 'g');  % 오른쪽 Y축의 눈금 및 값 색상을 초록색으로 설정
-    legend('Location', 'best');
+    legend('Location', 'best', 'FontSize', legendFontSize);
+    set(gca, 'FontSize', axisFontSize);
     hold off;
-
+    
+    % grid on;  % 그리드 제거
+    
     %% 4.7 Trip 1에 대한 별도의 Gamma 그래프 추가
     % Trip 1의 gamma 그래프를 별도의 큰 그림으로 플롯합니다.
     figure(5);  % 새로운 figure 생성
     set(gcf, 'Position', [100, 100, 800, 600]);  % Figure 크기 조정 (가로:800, 세로:600)
-    plot(theta_discrete, gamma_est_all(1, :), 'LineWidth', 2, 'Color', 'b');
-    xlabel('\theta = ln(\tau)', 'FontSize', 14);
-    ylabel('\gamma [\Omega/s]', 'FontSize', 14);
-    title('DRT Gamma for Trip 1', 'FontSize', 16);
-    grid on;
+    plot(theta_discrete, gamma_est_all(1, :), 'LineWidth', 3, 'Color', c_mat(1, :));
+    xlabel('$\theta = \ln(\tau \, [s])$', 'Interpreter', 'latex', 'FontSize', labelFontSize)
+    ylabel('\gamma [\Omega]', 'FontSize', labelFontSize);
+    title('Trip 1 : DRT ', 'FontSize', titleFontSize);
+    % grid on;  % 그리드 제거
     hold on;
     
     % R0 추정값을 그래프에 텍스트로 추가
-    text(min(theta_discrete), max(gamma_est_all(1, :)), sprintf('R₀ = %.3e Ω', R0_est_all(1)), ...
-        'FontSize', 12, 'Color', 'k', 'FontWeight', 'bold', 'HorizontalAlignment', 'left', 'VerticalAlignment', 'top');
+%     text(min(theta_discrete), max(gamma_est_all(1, :)), sprintf('R₀ = %.3e Ω', R0_est_all(1)), ...
+%         'FontSize', 12, 'Color', 'k', 'FontWeight', 'bold', 'HorizontalAlignment', 'left', 'VerticalAlignment', 'top');
     
     hold off;
     
+    %% 4.8 Trip 1에 대한 I, V, V_model vs t 그래프 추가
     %% 4.8 Trip 1에 대한 I, V, V_model vs t 그래프 추가
     if s == 1
         figure(6);  % 새로운 figure 생성
@@ -204,22 +220,29 @@ for s = 1:num_trips-1  % 마지막 트립은 데이터가 짧으므로 제외
         
         % 왼쪽 Y축: Voltage (V_sd 및 V_est)
         yyaxis left
-        plot(t, V_sd, 'b', 'LineWidth', 1.5, 'DisplayName', 'Measured V_{udds}');
+        plot(t, V_sd, 'Color', c_mat(1, :), 'LineWidth', 3, 'DisplayName', 'Measured V_{udds}');
         hold on;
-        plot(t, V_est, 'r--', 'LineWidth', 1.5, 'DisplayName', 'Estimated V_{est}');
-        ylabel('Voltage (V)', 'FontSize', 12, 'Color', 'k');
-        grid on;
+        plot(t, V_est, '--', 'Color', c_mat(2, :), 'LineWidth', 3, 'DisplayName', 'Estimated V_{est}');
+        ylabel('Voltage (V)', 'FontSize', labelFontSize, 'Color', c_mat(1, :));  % 'Voltage' 레이블 색상 설정
         
         % 오른쪽 Y축: Current (ik)
         yyaxis right
-        plot(t, ik, 'g', 'LineWidth', 1.5, 'DisplayName', 'Current (A)');
-        ylabel('Current (A)', 'FontSize', 12, 'Color', 'g');
-        set(gca, 'YColor', 'g');  % 오른쪽 Y축의 눈금 및 값 색상을 초록색으로 설정
+        plot(t, ik, 'Color', c_mat(3, :), 'LineWidth', 3, 'DisplayName', 'Current (A)');
+        ylabel('Current (A)', 'FontSize', labelFontSize, 'Color', c_mat(3, :));  % 'Current' 레이블 색상 설정
+        set(gca, 'YColor', c_mat(3, :));  % 오른쪽 Y축 눈금 및 값 색상 설정
         
-        % 축 및 제목 설정
-        xlabel('Time (s)', 'FontSize', 12);
-        title('I, V, V_{model} vs Time for Trip 1', 'FontSize', 14);
-        legend('Location', 'best');
+        % X축 레이블 설정 (왼쪽 Y축 색상과 일치)
+        xlabel('Time (s)', 'FontSize', labelFontSize);
+        
+        % 제목 설정
+        title('I, V, V_{model} vs Time for Trip 1', 'FontSize', titleFontSize);
+        
+        % 범례 설정
+        legend('Location', 'best', 'FontSize', legendFontSize);
+        
+        % 축의 숫자(틱 라벨) 폰트 크기 설정
+        set(gca, 'FontSize', axisFontSize);
+        
         hold off;
     end
 
@@ -243,21 +266,26 @@ Gamma_grid = gamma_sorted';
 % 3D 서피스 플롯 생성 (색상 매핑 추가)
 figure(3);
 surf_handle = surf(SOC_grid, Theta_grid, Gamma_grid);  
-xlabel('SOC', 'FontSize', 12);
-ylabel('\theta = ln(\tau [s])', 'FontSize', 12);
-zlabel('\gamma [\Omega/s]', 'FontSize', 12);
-title('Gamma(SOC, \theta) 3D Surface Plot', 'FontSize', 14);
+xlabel('SOC', 'FontSize', labelFontSize);
+ylabel('$\theta = \ln(\tau \, [s])$', 'Interpreter', 'latex', 'FontSize', labelFontSize);
+zlabel('\gamma [\Omega]', 'FontSize', labelFontSize);
+title('Gamma(SOC, \theta) 3D Surface Plot', 'FontSize', titleFontSize);
 colormap(jet);    % 원하는 컬러맵 설정
 c = colorbar;     % colorbar 핸들을 저장
 c.Label.String = 'Gamma [\Omega/s]';  % colorbar 라벨 설정
 view(135, 30);    % 시각화 각도 조정
-grid on;
+% grid on;  % 그리드 제거
+
+
 
 alpha(0.8);
 axis tight;
 
 % SOC 축을 0에서 1 사이로 설정
 xlim([0 1]);
+
+% 축 폰트 크기 조절
+set(gca, 'FontSize', axisFontSize);
 
 %% 5.2 개별 트립에 대한 3D 라인 플롯 생성
 % Set the z threshold
@@ -286,24 +314,26 @@ for s = 1:num_trips-1
           'LineWidth', 1.5, 'Color', cmap(color_idx, :));
 end
 
-xlabel('SOC', 'FontSize', 12);
-ylabel('\theta = ln(\tau) [s]', 'FontSize', 12);
-zlabel('\gamma [\Omega]', 'FontSize', 12);
-title('3D DRT for Different SOC Levels', 'FontSize', 14);
-grid on;
-view(135, 30);
-
+xlabel('SOC', 'FontSize', labelFontSize);
+ylabel('$\theta = \ln(\tau \, [s])$', 'Interpreter', 'latex', 'FontSize', labelFontSize);
+zlabel('\gamma [\Omega]', 'FontSize', labelFontSize);
+title('3D DRT', 'FontSize', titleFontSize);
 colormap(jet);  
 c = colorbar;  % Colorbar 설정
 c.Label.String = 'SOC';  % Colorbar 라벨 설정
 caxis([soc_min soc_max]);  % Colorbar 범위를 SOC 범위로 설정
 
+
+
 % SOC axis setting
 xlim([0 1]);
 zlim([0, z_threshold]);  % z axis limit to 0.25
 
-hold off;
+view(135, 30);
+grid on;  % 그리드 제거
 
+set(gca, 'FontSize', axisFontSize);
+hold off;
 
 
 

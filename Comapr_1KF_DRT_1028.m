@@ -1,5 +1,11 @@
 clc; clear; close all;
 
+%% Font size settings
+axisFontSize = 14;
+titleFontSize = 12;
+legendFontSize = 12;
+labelFontSize = 12;
+
 %% 1. 데이터 로드
 
 % ECM 파라미터 (HPPC 테스트로부터)
@@ -54,7 +60,7 @@ Q_HPPC = [1e-7 0;
 % 측정 잡음 공분산 (HPPC 기반)
 R_HPPC = 5.25e-2; % 측정 잡음 특성에 따라 조정
 
-%% 4. 칼만 필터 설정 - DRT
+%% 5. 칼만 필터 설정 - DRT
 
 num_RC = length(theta_discrete); % RC 소자의 개수 (DRT 기반)
 state_dimension = 1 + num_RC; % 상태 벡터 차원: [SOC; V_RC_1; V_RC_2; ... ; V_RC_n]
@@ -74,7 +80,7 @@ end
 % 측정 잡음 공분산 (DRT 기반)
 R_DRT = 5.25e-6; % 측정 잡음 분산
 
-%% 5. 트립 반복
+%% 6. 칼만 필터를 이용한 트립 반복
 
 num_trips = length(udds_data);
 
@@ -99,6 +105,9 @@ total_time_offset = 0;
 
 % --- Waitbar 초기화 ---
 hWait = waitbar(0, 'Processing trips...'); % Waitbar 생성
+
+% Define Color Matrix Using lines(9)
+c_mat = lines(9);  % Define a color matrix with 9 distinct colors
 
 try
     for trip_num = 1:num_trips-1
@@ -125,54 +134,54 @@ try
         end
 
         if trip_num == 1
-        % 첫 번째 트립의 경우 초기 SOC를 전압 기반으로 추정
-        initial_voltage = trip_voltage(1);
-        initial_soc = interp1(unique_ocv_values, unique_soc_values, initial_voltage, 'linear', 'extrap');
-    
-        % 현재 C-rate 계산 (초기 전류를 사용)
-        Crate_current_initial = abs(trip_current(1)) / Config.cap;
-        
-        % ECM 파라미터 보간 (초기 SOC와 C-rate에 대해 R1과 C1을 추정)
-        R1_initial = F_R1(initial_soc, Crate_current_initial);
-        C1_initial = F_C1(initial_soc, Crate_current_initial);
-        
-        % 음수나 0 방지
-        R1_initial = max(R1_initial, 1e-5);
-        C1_initial = max(C1_initial, 1e-5);
-        
-        % 초기 V1_est_HPPC 계산
-        dt_initial = dt(1); % 첫 시간 간격
-        V1_init_HPPC = trip_current(1) * R1_initial * (1 - exp(-dt_initial / (R1_initial * C1_initial)));
-        
-        % HPPC 기반 칼만 필터 초기화
-        SOC_est_HPPC = initial_soc;
-        V1_est_HPPC = V1_init_HPPC;
-        X_est_HPPC = [SOC_est_HPPC; V1_est_HPPC];
-        P_HPPC = P_init_HPPC;
-    
-        % DRT 기반 칼만 필터 초기화 (변경 없음)
-        SOC_est_DRT = initial_soc;
-        X_est_DRT = zeros(state_dimension, 1);
-        X_est_DRT(1) = SOC_est_DRT;
-        P_DRT = P_init_DRT;
-    
-        % 초기 V_RC_est 설정 (DRT 기반)
-        gamma_current_init = interp1(soc_sorted, gamma_sorted, SOC_est_DRT, 'linear', 'extrap');
-        gamma_current_init = gamma_current_init(:)'; % 1 x num_RC 벡터로 변환
-        delta_theta = theta_discrete(2) - theta_discrete(1);
-        R_i_init = gamma_current_init * delta_theta; % 1 x num_RC 벡터
-        C_i_init = tau_discrete ./ R_i_init;         % 1 x num_RC 벡터
-        V_RC_init = trip_current(1) * R_i_init .* (1 - exp(-dt_initial ./ (R_i_init .* C_i_init))); % 1 x num_RC 벡터
-        X_est_DRT(2:end) = V_RC_init(:); % num_RC x 1 벡터로 변환하여 저장
+            % 첫 번째 트립의 경우 초기 SOC를 전압 기반으로 추정
+            initial_voltage = trip_voltage(1);
+            initial_soc = interp1(unique_ocv_values, unique_soc_values, initial_voltage, 'linear', 'extrap');
+
+            % 현재 C-rate 계산 (초기 전류를 사용)
+            Crate_current_initial = abs(trip_current(1)) / Config.cap;
+
+            % ECM 파라미터 보간 (초기 SOC와 C-rate에 대해 R1과 C1을 추정)
+            R1_initial = F_R1(initial_soc, Crate_current_initial);
+            C1_initial = F_C1(initial_soc, Crate_current_initial);
+
+            % 음수나 0 방지
+            R1_initial = max(R1_initial, 1e-5);
+            C1_initial = max(C1_initial, 1e-5);
+
+            % 초기 V1_est_HPPC 계산
+            dt_initial = dt(1); % 첫 시간 간격
+            V1_init_HPPC = trip_current(1) * R1_initial * (1 - exp(-dt_initial / (R1_initial * C1_initial)));
+
+            % HPPC 기반 칼만 필터 초기화
+            SOC_est_HPPC = initial_soc;
+            V1_est_HPPC = V1_init_HPPC;
+            X_est_HPPC = [SOC_est_HPPC; V1_est_HPPC];
+            P_HPPC = P_init_HPPC;
+
+            % DRT 기반 칼만 필터 초기화 (변경 없음)
+            SOC_est_DRT = initial_soc;
+            X_est_DRT = zeros(state_dimension, 1);
+            X_est_DRT(1) = SOC_est_DRT;
+            P_DRT = P_init_DRT;
+
+            % 초기 V_RC_est 설정 (DRT 기반)
+            gamma_current_init = interp1(soc_sorted, gamma_sorted, SOC_est_DRT, 'linear', 'extrap');
+            gamma_current_init = gamma_current_init(:)'; % 1 x num_RC 벡터로 변환
+            delta_theta = theta_discrete(2) - theta_discrete(1);
+            R_i_init = gamma_current_init * delta_theta; % 1 x num_RC 벡터
+            C_i_init = tau_discrete ./ R_i_init;         % 1 x num_RC 벡터
+            V_RC_init = trip_current(1) * R_i_init .* (1 - exp(-dt_initial ./ (R_i_init .* C_i_init))); % 1 x num_RC 벡터
+            X_est_DRT(2:end) = V_RC_init(:); % num_RC x 1 벡터로 변환하여 저장
         else
             % 이후 트립의 경우 이전 트립의 최종 상태를 사용
             X_est_HPPC = X_est_HPPC_prev;
             P_HPPC = P_HPPC_prev;
-        
+
             X_est_DRT = X_est_DRT_prev;
             P_DRT = P_DRT_prev;
         end
-    
+
         % 결과 저장을 위한 변수 초기화
         num_samples = length(trip_time);
         SOC_save_HPPC = zeros(num_samples, 1);
@@ -182,12 +191,12 @@ try
         Vt_meas_save = trip_voltage;
         Time_save = trip_time;
         trip_current = trip_current(:); % 열 벡터로 변환
-        
+
         % 초기값 저장
         SOC_save_HPPC(1) = X_est_HPPC(1);
         OCV_initial_HPPC = interp1(unique_soc_values, unique_ocv_values, X_est_HPPC(1), 'linear', 'extrap');
         Vt_est_save_HPPC(1) = OCV_initial_HPPC + X_est_HPPC(2) + F_R0(X_est_HPPC(1), Crate_current_initial) * trip_current(1);
-        
+
         SOC_save_DRT(1) = X_est_DRT(1);
         OCV_initial_DRT = interp1(unique_soc_values, unique_ocv_values, X_est_DRT(1), 'linear', 'extrap');
         Vt_est_save_DRT(1) = OCV_initial_DRT + sum(X_est_DRT(2:end)) + R0_est_all(trip_num) * trip_current(1);
@@ -359,34 +368,34 @@ try
 
         % Subplot 1: SOC 비교
         subplot(3,1,1);
-        plot(Time_save , trip_SOC_true * 100, 'k', 'LineWidth', 1.5, 'DisplayName', 'True SOC');
         hold on;
-        plot(Time_save , SOC_save_HPPC * 100, 'b--', 'LineWidth', 1.5, 'DisplayName', 'Estimated SOC (HPPC)');
-        plot(Time_save , SOC_save_DRT * 100, 'r--', 'LineWidth', 1.5, 'DisplayName', 'Estimated SOC (DRT)');
-        xlabel('Time [s]');
-        ylabel('SOC [%]');
-        title(sprintf('Trip %d: SOC Estimation using Kalman Filter', trip_num));
-        legend('Location', 'best');
-        grid on;
+        plot(Time_save, trip_SOC_true * 100, 'Color', c_mat(1, :), 'LineWidth', 1.5, 'DisplayName', 'True SOC');
+        plot(Time_save, SOC_save_HPPC * 100, '--', 'Color', c_mat(2, :), 'LineWidth', 1.5, 'DisplayName', 'Estimated SOC (HPPC)');
+        plot(Time_save, SOC_save_DRT * 100, '--', 'Color', c_mat(3, :), 'LineWidth', 1.5, 'DisplayName', 'Estimated SOC (DRT)');
+        xlabel('Time [s]', 'FontSize', labelFontSize);
+        ylabel('SOC [%]', 'FontSize', labelFontSize);
+        title(sprintf('Trip %d: SOC Estimation using Kalman Filter', trip_num), 'FontSize', titleFontSize);
+        legend('Location', 'best', 'FontSize', legendFontSize);
+        hold off;
 
         % Subplot 2: 터미널 전압 비교
         subplot(3,1,2);
-        plot(Time_save , Vt_meas_save, 'k', 'LineWidth', 1.0, 'DisplayName', 'Measured Voltage');
         hold on;
-        plot(Time_save , Vt_est_save_HPPC, 'b--', 'LineWidth', 1.0, 'DisplayName', 'Estimated Voltage (HPPC)');
-        plot(Time_save , Vt_est_save_DRT, 'r--', 'LineWidth', 1.0, 'DisplayName', 'Estimated Voltage (DRT)');
-        xlabel('Time [s]');
-        ylabel('Terminal Voltage [V]');
-        legend('Location', 'best');
-        grid on;
+        plot(Time_save, Vt_meas_save, 'Color', c_mat(1, :), 'LineWidth', 1.0, 'DisplayName', 'Measured Voltage');
+        plot(Time_save, Vt_est_save_HPPC, '--', 'Color', c_mat(2, :), 'LineWidth', 1.0, 'DisplayName', 'Estimated Voltage (HPPC)');
+        plot(Time_save, Vt_est_save_DRT, '--', 'Color', c_mat(3, :), 'LineWidth', 1.0, 'DisplayName', 'Estimated Voltage (DRT)');
+        xlabel('Time [s]', 'FontSize', labelFontSize);
+        ylabel('Terminal Voltage [V]', 'FontSize', labelFontSize);
+        legend('Location', 'best', 'FontSize', legendFontSize);
+        hold off;
 
         % Subplot 3: 전류 프로파일
         subplot(3,1,3);
-        plot(Time_save , trip_current, 'g', 'LineWidth', 1.0);
-        xlabel('Time [s]');
-        ylabel('Current [A]');
-        title('Current Profile');
-        grid on;
+        plot(Time_save, trip_current, 'Color', c_mat(4, :), 'LineWidth', 1.0);
+        xlabel('Time [s]', 'FontSize', labelFontSize);
+        ylabel('Current [A]', 'FontSize', labelFontSize);
+        title('Current Profile', 'FontSize', titleFontSize);
+        grid off;
 
         % 이전 트립의 최종 상태를 저장하여 다음 트립의 초기 상태로 사용
         X_est_HPPC_prev = X_est_HPPC;
@@ -423,65 +432,62 @@ figure('Name', 'All Trips Comparison', 'NumberTitle', 'off');
 
 % Subplot 1: SOC 비교
 subplot(3,1,1);
-plot(all_time_concat, all_SOC_true_concat * 100, 'k', 'LineWidth', 1.5, 'DisplayName', 'True SOC');
 hold on;
-plot(all_time_concat, all_SOC_HPPC_concat * 100, 'b--', 'LineWidth', 1.5, 'DisplayName', 'Estimated SOC (HPPC)');
-plot(all_time_concat, all_SOC_DRT_concat * 100, 'r--', 'LineWidth', 1.5, 'DisplayName', 'Estimated SOC (DRT)');
-xlabel('Time [s]');
-ylabel('SOC [%]');
-title('All Trips: SOC Estimation using Kalman Filter');
-legend('Location', 'best');
-grid on;
+plot(all_time_concat, all_SOC_true_concat * 100, 'Color', c_mat(1, :), 'LineWidth', 1.5, 'DisplayName', 'True SOC');
+plot(all_time_concat, all_SOC_HPPC_concat * 100, '--', 'Color', c_mat(2, :), 'LineWidth', 1.5, 'DisplayName', 'Estimated SOC (HPPC)');
+plot(all_time_concat, all_SOC_DRT_concat * 100, '--', 'Color', c_mat(3, :), 'LineWidth', 1.5, 'DisplayName', 'Estimated SOC (DRT)');
+xlabel('Time [s]', 'FontSize', labelFontSize);
+ylabel('SOC [%]', 'FontSize', labelFontSize);
+title('All Trips: SOC Estimation using Kalman Filter', 'FontSize', titleFontSize);
+legend('Location', 'best', 'FontSize', legendFontSize);
+hold off;
 
 % Subplot 2: 터미널 전압 비교
 subplot(3,1,2);
-plot(all_time_concat, all_Vt_meas_concat, 'k', 'LineWidth', 1.0, 'DisplayName', 'Measured Voltage');
 hold on;
-plot(all_time_concat, all_Vt_HPPC_concat, 'b--', 'LineWidth', 1.0, 'DisplayName', 'Estimated Voltage (HPPC)');
-plot(all_time_concat, all_Vt_DRT_concat, 'r--', 'LineWidth', 1.0, 'DisplayName', 'Estimated Voltage (DRT)');
-xlabel('Time [s]');
-ylabel('Terminal Voltage [V]');
-legend('Location', 'best');
-grid on;
+plot(all_time_concat, all_Vt_meas_concat, 'Color', c_mat(1, :), 'LineWidth', 1.0, 'DisplayName', 'Measured Voltage');
+plot(all_time_concat, all_Vt_HPPC_concat, '--', 'Color', c_mat(2, :), 'LineWidth', 1.0, 'DisplayName', 'Estimated Voltage (HPPC)');
+plot(all_time_concat, all_Vt_DRT_concat, '--', 'Color', c_mat(3, :), 'LineWidth', 1.0, 'DisplayName', 'Estimated Voltage (DRT)');
+xlabel('Time [s]', 'FontSize', labelFontSize);
+ylabel('Terminal Voltage [V]', 'FontSize', labelFontSize);
+legend('Location', 'best', 'FontSize', legendFontSize);
+hold off;
 
 % Subplot 3: 전류 프로파일
 subplot(3,1,3);
-plot(all_time_concat, all_current_concat, 'g', 'LineWidth', 1.0);
-xlabel('Time [s]');
-ylabel('Current [A]');
-title('All Trips: Current Profile');
-grid on;
+plot(all_time_concat, all_current_concat, 'Color', c_mat(4, :), 'LineWidth', 1.0);
+xlabel('Time [s]', 'FontSize', labelFontSize);
+ylabel('Current [A]', 'FontSize', labelFontSize);
+title('All Trips: Current Profile', 'FontSize', titleFontSize);
+grid off;
 
 %% 추가 figure 1029
 
-% 6.3.1. 전체 SOC 그래프 (새로운 Figure, 서브플롯 없이)
+% 6.3.1. 전체 SOC 그래프 
+
+
+% 전체 SOC 비교 그래프
 figure('Name', 'Entire SOC Comparison', 'NumberTitle', 'off');
-plot(all_time_concat, all_SOC_true_concat * 100, 'k', 'LineWidth', 1.5, 'DisplayName', 'True SOC');
 hold on;
-plot(all_time_concat, all_SOC_HPPC_concat * 100, 'b--', 'LineWidth', 1.5, 'DisplayName', 'Estimated SOC (HPPC)');
-plot(all_time_concat, all_SOC_DRT_concat * 100, 'r--', 'LineWidth', 1.5, 'DisplayName', 'Estimated SOC (DRT)');
-xlabel('Time [s]');
-ylabel('SOC [%]');
-title('All Trips: SOC Estimation');
-legend('Location', 'best');
-grid on;
+plot(all_time_concat, all_SOC_true_concat * 100, 'Color', c_mat(1, :), 'LineWidth', 3, 'DisplayName', 'True SOC'); 
+plot(all_time_concat, all_SOC_HPPC_concat * 100, '--', 'Color', c_mat(3, :), 'LineWidth', 3, 'DisplayName', 'Estimated SOC (HPPC)'); 
+plot(all_time_concat, all_SOC_DRT_concat * 100, '--', 'Color', c_mat(2, :), 'LineWidth', 3, 'DisplayName', 'Estimated SOC (DRT)'); 
+xlabel('Time [s]', 'FontSize', labelFontSize);
+ylabel('SOC [%]', 'FontSize', labelFontSize);
+title('All Trips: SOC Estimation', 'FontSize', titleFontSize);
+legend('Location', 'best', 'FontSize', legendFontSize);
+hold off;
 
-% 6.3.2. 첫 번째 트립의 SOC 하락 그래프 (큰 플롯)
-figure('Name', 'Trip 1 SOC Drop', 'NumberTitle', 'off', 'Position', [100, 100, 1200, 600]); % 원하는 크기로 조정
-plot(all_time{1}, all_SOC_true{1} * 100, 'k', 'LineWidth', 2.0, 'DisplayName', 'True SOC');
+% 6.3.2. 첫 번째 트립의 SOC 그래프 (큰 플롯)
+figure('Name', 'Trip 1 SOC estimation', 'NumberTitle', 'off'); % 원하는 크기로 조정
 hold on;
-plot(all_time{1}, all_SOC_HPPC{1} * 100, 'b--', 'LineWidth', 2.0, 'DisplayName', 'Estimated SOC (HPPC)');
-plot(all_time{1}, all_SOC_DRT{1} * 100, 'r--', 'LineWidth', 2.0, 'DisplayName', 'Estimated SOC (DRT)');
-xlabel('Time [s]');
-ylabel('SOC [%]');
-title('Trip 1: SOC Estimation');
-legend('Location', 'best');
-grid on;
-
-
-
-
-
-
+plot(all_time{1}, all_SOC_true{1} * 100, 'Color', c_mat(1, :), 'LineWidth', 3, 'DisplayName', 'True SOC'); 
+plot(all_time{1}, all_SOC_HPPC{1} * 100, '--', 'Color', c_mat(3, :), 'LineWidth', 3, 'DisplayName', 'Estimated SOC (HPPC)');
+plot(all_time{1}, all_SOC_DRT{1} * 100, '--', 'Color', c_mat(2, :), 'LineWidth', 3, 'DisplayName', 'Estimated SOC (DRT)'); 
+xlabel('Time [s]', 'FontSize', labelFontSize);
+ylabel('SOC [%]', 'FontSize', labelFontSize);
+title('Trip 1: SOC Estimation', 'FontSize', titleFontSize);
+legend('Location', 'best', 'FontSize', legendFontSize);
+hold off; 
 
 

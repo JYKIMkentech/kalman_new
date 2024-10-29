@@ -267,22 +267,17 @@ Voltage_combined = vertcat(data63_V, data64_V, data65_V);
 c_mat = lines(9);
 
 % 전류와 전압 그래프 그리기
-plot(Time_combined, Current_combined, 'Color', c_mat(1,:), 'LineWidth', 3);
+plot(Time_combined, Current_combined, 'Color', c_mat(1,:), 'LineWidth', 1.5);
 xlabel('time');
-
-% 왼쪽 y축 설정 (Current)
 yyaxis left
 ylabel('Current (A)', 'Color', c_mat(1,:)); % Current y축 레이블 색깔 지정
-ax = gca;
-ax.YColor = c_mat(1,:); % y축 눈금 및 축 색깔 지정
 ylim([-3 1]); % Current y축 범위 설정
+
 hold on;
 
-% 오른쪽 y축 설정 (Voltage)
 yyaxis right
 ylabel('Voltage (V)', 'Color', c_mat(2,:)); % Voltage y축 레이블 색깔 지정
-ax.YColor = c_mat(2,:); % y축 눈금 및 축 색깔 지정
-plot(Time_combined, Voltage_combined, 'Color', c_mat(2,:), 'LineWidth', 3 );
+plot(Time_combined, Voltage_combined, 'Color', c_mat(2,:), 'LineWidth', 1.5);
 
 xlim([46624, 46650.4]);
 
@@ -303,27 +298,25 @@ if ~isempty(step64_index_in_step_dis)
     voltage_model_step64_adjusted = voltage_model_step64 + data63_V(end);
 
     % 모델 전압 그래프 추가 (검은색 점선)
-    plot(data64_t, voltage_model_step64_adjusted, '--', 'Color', c_mat(3,:), 'LineWidth', 3);
+    plot(data64_t, voltage_model_step64_adjusted, '--', 'Color', c_mat(3,:), 'LineWidth', 1.5);
     xlabel('Time (s)');
     ylabel('Current (A)');
-    yyaxis left
-    ylabel('Current (A)', 'Color', c_mat(1,:)); % Current y축 레이블 색깔 지정
     yyaxis right 
     ylabel('Voltage (V)');
     legend('Current', 'Voltage', 'Model Voltage');
-    title('DCIR');
-   
+    title('D');
+    grid on;
 
 
 end
 
-% xlabel('Time (s)');
-% ylabel('Current (A)');
-% yyaxis right 
-% ylabel('Voltage (V)');
-% legend('Current', 'Voltage', 'Model Voltage');
-% title('DCIR');
-% grid on;
+xlabel('Time (s)');
+ylabel('Current (A)');
+yyaxis right 
+ylabel('Voltage (V)');
+legend('Current', 'Voltage', 'Model Voltage');
+title('Time vs Current and Voltage');
+grid on;
 
 hold off;
 

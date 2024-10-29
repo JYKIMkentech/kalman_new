@@ -2,6 +2,12 @@
 
 clc; clear; close all;
 
+% Font size settings
+axisFontSize = 14;
+titleFontSize = 12;
+legendFontSize = 12;
+labelFontSize = 12;
+
 % AS1.mat 파일 로드
 load('AS1.mat');  % 첫 번째 코드에서 저장한 A, T, ik_scenarios, t 변수를 불러옵니다.
 
@@ -57,6 +63,9 @@ for i = 1:n-1
     L(i, i) = -1;
     L(i, i+1) = 1;
 end
+
+%% Define Color Matrix Using lines(9)
+c_mat = lines(9);  % Define a color matrix with 9 distinct colors
 
 %% Voltage Synthesis and DRT Estimation
 R0 = 0.1;  % Ohmic resistance
@@ -122,7 +131,7 @@ for s = 1:num_scenarios
     H = W' * W + lambda * (L' * L);
     f = -W' * y_adjusted;
     
-    % H를 대칭 행렬로 보정
+    % H를 대칭 행렬으로 보정
     H = (H + H') / 2;
     
     % 제약 조건 설정: gamma >= 0
@@ -148,40 +157,41 @@ for s = 1:num_scenarios
     figure(1);  
     subplot(5, 2, s);
     yyaxis left
-    plot(t, ik, 'b-', 'LineWidth', 1.5);
-    ylabel('Current (A)');
-    xlabel('Time (s)');
-    grid on;
+    plot(t, ik, 'Color', c_mat(mod(s-1,9)+1, :), 'LineWidth', 1.5);  % Use c_mat for current
+    ylabel('Current (A)', 'FontSize', labelFontSize);
+    xlabel('Time (s)', 'FontSize', labelFontSize);
+    
     
     yyaxis right
-    plot(t, V_sd, 'r-', 'LineWidth', 1.5);
-    ylabel('Voltage (V)');
+    plot(t, V_sd, 'Color', c_mat(mod(s-1,9)+1, :), 'LineWidth', 1.5);  % Use same color for voltage
+    ylabel('Voltage (V)', 'FontSize', labelFontSize);
     ylim([min(V_sd)-0.1, max(V_sd)+0.1]);
     
     % Update title with correct amplitudes and periods
     title(['Scenario ', num2str(s), ...
            ': A1=', num2str(A(s,1)), ', A2=', num2str(A(s,2)), ', A3=', num2str(A(s,3)), ...
-           ', T1=', num2str(T(s,1)), ', T2=', num2str(T(s,2)), ', T3=', num2str(T(s,3))]);
+           ', T1=', num2str(T(s,1)), ', T2=', num2str(T(s,2)), ', T3=', num2str(T(s,3))], ...
+           'FontSize', titleFontSize);
     
-    % Add legend
-    legend({'Current (A)', 'Voltage (V)'}, 'Location', 'best');
+    % Add legend with increased font size
+    legend({'Current (A)', 'Voltage (V)'}, 'Location', 'best', 'FontSize', legendFontSize);
     
-    % DRT Comparison Plot
-    figure(1 + s);  % DRT Comparison Figure for each scenario
-    hold on;
-    
-    % Plot True gamma
-    plot(theta_discrete, gamma_discrete_true, 'k-', 'LineWidth', 1.5, 'DisplayName', 'True \gamma');
-    
-    % Plot Estimated gamma from quadprog
-    plot(theta_discrete, gamma_all(s, :), ':', 'Color', 'g', 'LineWidth', 1.5, 'DisplayName', 'Estimated \gamma (quadprog)');
-    
-    hold off;
-    xlabel('\theta = ln(\tau)');
-    ylabel('\gamma');
-    title(['DRT Comparison for Scenario ', num2str(s), ' (\lambda = ', num2str(lambda), ')']);
-    legend('Location', 'Best');
-    grid on;
+%     % DRT Comparison Plot
+%     figure(1 + s);  % DRT Comparison Figure for each scenario
+%     hold on;
+%     
+%     % Plot True gamma
+%     plot(theta_discrete, gamma_discrete_true, 'k-', 'LineWidth', 1.5, 'DisplayName', 'True \gamma');
+%     
+%     % Plot Estimated gamma from quadprog
+%     plot(theta_discrete, gamma_all(s, :), ':', 'Color', 'g', 'LineWidth', 1.5, 'DisplayName', 'Estimated \gamma (quadprog)');
+%     
+%     hold off;
+%     xlabel('\theta = ln(\tau)', 'FontSize', labelFontSize);
+%     ylabel('\gamma', 'FontSize', labelFontSize);
+%     title(['DRT Comparison for Scenario ', num2str(s), ' (\lambda = ', num2str(lambda), ')'], 'FontSize', titleFontSize);
+%     legend('Location', 'Best', 'FontSize', legendFontSize);
+%     
 end
 
 % 현재 시나리오의 A와 T 값 출력
@@ -194,8 +204,9 @@ fprintf('T1=%.3f, T2=%.3f, T3=%.3f\n', T(s,1), T(s,2), T(s,3));
 % Define the selected scenarios
 selected_scenarios = [6, 7, 8, 9];
 
-% Colors for different scenarios
-colors = lines(length(selected_scenarios));
+% Colors for different scenarios using c_mat
+% Since c_mat has 9 colors and scenarios 6-9 are within 1-9, we can directly index
+% No need for c_mat_extended
 
 %% Figure 2: I(t) and V(t) for Scenarios 6,7,8,9 as Subplots
 figure(2);
@@ -203,35 +214,47 @@ for idx = 1:length(selected_scenarios)
     s = selected_scenarios(idx);
     subplot(2, 2, idx);
     yyaxis left
-    plot(t, ik_scenarios(s, :), 'b-', 'LineWidth', 1.5);
-    ylabel('Current (A)');
+    plot(t, ik_scenarios(s, :), 'Color', c_mat(1, :), 'LineWidth', 1.5);  % Use c_mat for current
+    ylabel('Current (A)', 'FontSize', labelFontSize);
     yyaxis right
-    plot(t, V_sd_all(s, :), 'r-', 'LineWidth', 1.5);
-    ylabel('Voltage (V)');
-    xlabel('Time (s)');
-    title(['Scenario ', num2str(s), ...
-           ': A1=', num2str(A(s,1)), ', A2=', num2str(A(s,2)), ', A3=', num2str(A(s,3)), ...
-           ', T1=', num2str(T(s,1)), ', T2=', num2str(T(s,2)), ', T3=', num2str(T(s,3))]);
-    legend({'Current (A)', 'Voltage (V)'}, 'Location', 'best');
-    grid on;
+    plot(t, V_sd_all(s, :), 'Color', c_mat(2, :), 'LineWidth', 1.5);  % Use same color for voltage
+    ylabel('Voltage (V)', 'FontSize', labelFontSize);
+    xlabel('Time (s)', 'FontSize', labelFontSize);
+%     title(['Scenario ', num2str(s), ...
+%            ': A1=', num2str(A(s,1)), ', A2=', num2str(A(s,2)), ', A3=', num2str(A(s,3)), ...
+%            ', T1=', num2str(T(s,1)), ', T2=', num2str(T(s,2)), ', T3=', num2str(T(s,3))], ...
+%            'FontSize', titleFontSize);
+     title(['Scenario ', num2str(s)], 'FontSize', titleFontSize);
+
+    legend({'Current (A)', 'Voltage (V)'}, 'Location', 'best', 'FontSize', legendFontSize);
+    
 end
-sgtitle('Current and Voltage vs Time for Scenarios 6, 7, 8, 9');
+sgtitle('Bimodal: Current and Voltage vs Time', 'FontSize', titleFontSize);
 
 %% Figure 3: gamma vs theta for Scenarios 6,7,8,9
-figure(4);
+figure(3);
 hold on;
 for idx = 1:length(selected_scenarios)
     s = selected_scenarios(idx);
     % Plot the estimated gamma for the current scenario
-    plot(theta_discrete, gamma_all(s, :), '--', 'LineWidth', 1.5, 'Color', colors(idx,:), 'DisplayName', ['Estimated \gamma Scenario ', num2str(s)]);
+    plot(theta_discrete, gamma_all(s, :), '--', 'LineWidth', 1.5, ...
+        'Color', c_mat(s, :), 'DisplayName', ['Estimated \gamma Scenario ', num2str(s)]);
     
-    % Plot the true gamma for reference alongside each estimated gamma
+    % Optionally, differentiate line styles if needed
+    % Example:
+    % line_styles = {'--', '-.', ':', '-'};
+    % plot(theta_discrete, gamma_all(s, :), line_styles{idx}, 'LineWidth', 1.5, ...
+    %     'Color', c_mat(s, :), 'DisplayName', ['Estimated \gamma Scenario ', num2str(s)]);
 end
-    plot(theta_discrete, gamma_discrete_true, 'k-', 'LineWidth', 2, 'DisplayName', 'True \gamma');
-    hold off;
-    xlabel('\theta = ln(\tau)');
-    ylabel('\gamma');
-    title('DRT Comparison for Selected Scenarios');
-    legend('Location', 'Best');
-    grid on;
+% Plot the true gamma for reference
+plot(theta_discrete, gamma_discrete_true, 'k-', 'LineWidth', 2, 'DisplayName', 'True \gamma');
+hold off;
+xlabel('$\theta = \ln(\tau \, [s])$', 'Interpreter', 'latex', 'FontSize', labelFontSize)
+ylabel('\gamma', 'FontSize', labelFontSize);
+title('Bimodal : Estimated \gamma', 'FontSize', titleFontSize);
+legend('Location', 'Best', 'FontSize', 9);
+
+% Enhance figure aesthetics by setting font sizes for axes
+set(gca, 'FontSize', axisFontSize);
+
 
