@@ -1,302 +1,267 @@
 clc; clear; close all;
-
-%% 2. DRT 추정 및 교차 검증
-
-% Load the generated AS1.mat 파일
-load('AS1.mat');  % Load A, T, ik_scenarios, t variables
-
-%% Parameters 
-n = 40;  % Number of discrete elements
-dt = t(2) - t(1);  % Time step based on loaded time vector
-num_scenarios = 10;  % Number of current scenarios
-lambda_values = logspace(-4, 9, 50);  % 람다 값 범위 설정
-
-%% DRT 설정
+%%
+% 세타 (ln (tau)) 가 두 개의 정규분포를 따른다 ---> tau는 두 개의 로그정규분포를 따른다.
 
 % Theta = ln(tau) (x축)
 % gamma(theta) = [ R(exp(theta)) * exp(theta) ] = [ R(tau) * tau ] (y축)
+% R_i = gamma_i * delta theta % 면적은 저항 = gamma (세로) * delta (가로, 일정하게)
 
-% True DRT Parameters (gamma_discrete)
-% mu_theta = -0.3404;       % 계산된 평균 값
-% sigma_theta = 0.4991;     % 계산된 표준편차 값
+%% AS1.mat 파일 로드
+load('AS1.mat');  % A, T, ik_scenarios, t 변수를 불러옵니다.
 
-mu_theta = log(10);       % 계산된 평균 값
-sigma_theta = 1;     % 계산된 표준편차 값
+%% Parameters 
+n = 40;  % 이산화 요소의 개수
+num_scenarios = 10;  % 전류 시나리오의 수
+lambda = 0.51795;  % 정규화 파라미터
+N_resample = 200;  % 부트스트랩 샘플 수
 
-% Discrete theta values (from -3sigma to +3sigma)
-theta_min = mu_theta - 3*sigma_theta;
-theta_max = mu_theta + 3*sigma_theta;
+%% DRT - Bimodal Distribution
+
+% 첫 번째 모달의 파라미터
+mu_theta1 = log(10);       % 첫 번째 모달의 평균 값
+sigma_theta1 = 0.5;        % 첫 번째 모달의 표준편차 값
+
+% 두 번째 모달의 파라미터
+mu_theta2 = log(100);      % 두 번째 모달의 평균 값
+sigma_theta2 = 0.5;        % 두 번째 모달의 표준편차 값
+
+% 이산화된 theta 값들
+theta_min = mu_theta1 - 3*sigma_theta1;
+theta_max = mu_theta2 + 3*sigma_theta2;
 theta_discrete = linspace(theta_min, theta_max, n);
 
-% Corresponding tau values
+% 해당하는 tau 값들
 tau_discrete = exp(theta_discrete);
 
 % Delta theta
 delta_theta = theta_discrete(2) - theta_discrete(1);
 
-% True gamma distribution
-gamma_discrete_true = (1/(sigma_theta * sqrt(2*pi))) * exp(- (theta_discrete - mu_theta).^2 / (2 * sigma_theta^2));
+% 실제 gamma 분포 (Bimodal)
+gamma1 = (1/(sigma_theta1 * sqrt(2*pi))) * exp(- (theta_discrete - mu_theta1).^2 / (2 * sigma_theta1^2));
+gamma2 = (1/(sigma_theta2 * sqrt(2*pi))) * exp(- (theta_discrete - mu_theta2).^2 / (2 * sigma_theta2^2));
+gamma_discrete_true = gamma1 + gamma2;
 
-% Normalize gamma to have a maximum value of 1
+% gamma를 최대값이 1이 되도록 정규화
 gamma_discrete_true = gamma_discrete_true / max(gamma_discrete_true);
 
-% Analytical gamma estimates
-gamma_analytical_all = zeros(num_scenarios, n);  % Analytical gamma estimates
-
-% Voltage storage variables (V_est and V_sd for each scenario)
-V_est_all = zeros(num_scenarios, length(t));  % For storing V_est for all scenarios
-V_sd_all = zeros(num_scenarios, length(t));   % For storing V_sd for all scenarios
-
-%% First-order difference matrix L
+%% 일차 차분 행렬 L
 L = zeros(n-1, n);
 for i = 1:n-1
     L(i, i) = -1;
     L(i, i+1) = 1;
 end
 
-%% Voltage Synthesis
-R0 = 0.1;  % Ohmic resistance
-OCV = 0;   % Open Circuit Voltage
+%% 전압 및 DRT 추정 저장 변수 초기화
+gamma_original_all = zeros(num_scenarios, n);  % 원본 데이터로부터 구한 gamma 저장
+V_est_all = zeros(num_scenarios, length(t));  % 각 시나리오의 V_est 저장
+V_sd_all = zeros(num_scenarios, length(t));   % 각 시나리오의 V_sd 저장
 
-rng(0);  % Ensure reproducibility of noise
-
+%% 전압 합성 및 DRT 추정
 for s = 1:num_scenarios
     fprintf('Processing Scenario %d/%d...\n', s, num_scenarios);
     
-    % Current for the scenario
-    ik = ik_scenarios(s, :);  % 로드된 전류 시나리오 사용
+    % 현재 시나리오의 전류
+    ik_original = ik_scenarios(s, :);  % 원본 전류 시나리오 사용
+    t_original = t;  % 원본 시간 벡터
     
-    %% Initialize Voltage
-    V_est = zeros(1, length(t));  % Model voltage calculated via n-element model
-    V_RC = zeros(n, length(t));  % Voltages for each element
+    % 시간 간격 계산 (dt_original)
+    dt_original = t_original(2:end) - t_original(1:end-1);  % dt(k) = t(k+1) - t(k)
     
-    %% Voltage Calculation
-    for k_idx = 1:length(t)
+    %% 전압 초기화
+    V_est = zeros(1, length(t_original));  % n-요소 모델을 통한 모델 전압 계산
+    R0 = 0.1;  % 저항 (오움)
+    OCV = 0;   % 개방 회로 전압
+    V_RC = zeros(n, length(t_original));  % 각 요소의 전압
+    
+    %% 전압 계산 (원본 데이터로)
+    for k_idx = 1:length(t_original)
         if k_idx == 1
+            dt_k = dt_original(1);  % 첫 번째 dt
             for i = 1:n
-                V_RC(i, k_idx) = gamma_discrete_true(i) * delta_theta * ik(k_idx) * (1 - exp(-dt / tau_discrete(i)));
+                V_RC(i, k_idx) = gamma_discrete_true(i) * delta_theta * ik_original(k_idx) * (1 - exp(-dt_k / tau_discrete(i)));
+            end
+        elseif k_idx < length(t_original)
+            dt_k = dt_original(k_idx);  % dt(k) = t(k+1) - t(k)
+            for i = 1:n
+                V_RC(i, k_idx) = V_RC(i, k_idx-1) * exp(-dt_k / tau_discrete(i)) + ...
+                                 gamma_discrete_true(i) * delta_theta * ik_original(k_idx) * (1 - exp(-dt_k / tau_discrete(i)));
             end
         else
+            dt_k = dt_original(end);  % 마지막 dt
             for i = 1:n
-                V_RC(i, k_idx) = V_RC(i, k_idx-1) * exp(-dt / tau_discrete(i)) + ...
-                                 gamma_discrete_true(i) * delta_theta * ik(k_idx) * (1 - exp(-dt / tau_discrete(i)));
+                V_RC(i, k_idx) = V_RC(i, k_idx-1) * exp(-dt_k / tau_discrete(i)) + ...
+                                 gamma_discrete_true(i) * delta_theta * ik_original(k_idx) * (1 - exp(-dt_k / tau_discrete(i)));
             end
         end
-        V_est(k_idx) = OCV + R0 * ik(k_idx) + sum(V_RC(:, k_idx));
+        V_est(k_idx) = OCV + R0 * ik_original(k_idx) + sum(V_RC(:, k_idx));
     end
     
-    % Store V_est for the current scenario
-    V_est_all(s, :) = V_est;  % Save the calculated V_est for this scenario
+    % 현재 시나리오의 V_est 저장
+    V_est_all(s, :) = V_est;  % 이 시나리오의 계산된 V_est 저장
     
-    %% Add Noise to the Voltage
+    %% 전압에 노이즈 추가
+    rng(0);  % 노이즈의 재현성을 보장
     noise_level = 0.01;
-    V_sd = V_est + noise_level * randn(size(V_est));  % V_sd = synthetic measured voltage
+    V_sd = V_est + noise_level * randn(size(V_est));  % V_sd = 합성된 측정 전압
     
-    % Store V_sd for the current scenario
-    V_sd_all(s, :) = V_sd;  % Save the noisy V_sd for this scenario
-end
-
-%% 교차 검증을 통한 람다 최적화
-
-% 테스트 시나리오를 [9 10]으로 고정
-test_scenarios = [9, 10];
-train_scenarios_full = setdiff(1:num_scenarios, test_scenarios);  % [1 2 3 4 5 6 7 8]
-
-% 학습 시나리오에서 2개를 검증 세트로 선택하는 조합 생성
-validation_indices = nchoosek(train_scenarios_full, 2);  % 8C2 = 28개의 조합
-num_folds = size(validation_indices, 1);  % 28개의 폴드
-
-cve_lambda = zeros(length(lambda_values), 1);  % 각 람다에 대한 CVE 저장
-% cve_fold = zeros(length(lambda_values), num_folds);  % 각 람다 및 폴드에 대한 CVE 저장 (삭제)
-gamma_estimates_all = cell(length(lambda_values), num_folds);  % 각 람다 및 폴드에 대한 gamma 저장
-
-for l_idx = 1:length(lambda_values)
-    lambda = lambda_values(l_idx);
-    cve_total = 0;
+    % 현재 시나리오의 V_sd 저장
+    V_sd_all(s, :) = V_sd;  % 이 시나리오의 노이즈가 추가된 V_sd 저장
     
-    for fold = 1:num_folds
-        % 검증 세트와 학습 세트 분리
-        val_scenarios = validation_indices(fold, :);
-        train_scenarios = setdiff(train_scenarios_full, val_scenarios);
-        
-        % 학습 데이터로 gamma 추정
-        gamma_estimated = estimate_gamma(lambda, train_scenarios, ik_scenarios, V_sd_all, tau_discrete, delta_theta, L, OCV, R0, dt);
-        
-        % γ 추정치 저장
-        gamma_estimates_all{l_idx, fold} = gamma_estimated;
-        
-        % 검증 데이터로 전압 예측 및 에러 계산
-        error_fold = calculate_error(gamma_estimated, val_scenarios, ik_scenarios, V_sd_all, tau_discrete, delta_theta, OCV, R0, dt);
-        
-        % 폴드의 에러 합산
-        cve_total = cve_total + error_fold;
+    %% 원본 데이터로부터 gamma 추정 (DRT Original)
+    % W 행렬 구성
+    W_original = zeros(length(t_original), n);
+    for k_idx = 1:length(t_original)
+        if k_idx == 1
+            dt_k = dt_original(1);
+            for i = 1:n
+                W_original(k_idx, i) = ik_original(k_idx) * (1 - exp(-dt_k / tau_discrete(i))) * delta_theta;
+            end
+        elseif k_idx < length(t_original)
+            dt_k = dt_original(k_idx);
+            for i = 1:n
+                W_original(k_idx, i) = W_original(k_idx-1, i) * exp(-dt_k / tau_discrete(i)) + ...
+                                       ik_original(k_idx) * (1 - exp(-dt_k / tau_discrete(i))) * delta_theta;
+            end
+        else
+            dt_k = dt_original(end);
+            for i = 1:n
+                W_original(k_idx, i) = W_original(k_idx-1, i) * exp(-dt_k / tau_discrete(i)) + ...
+                                       ik_original(k_idx) * (1 - exp(-dt_k / tau_discrete(i))) * delta_theta;
+            end
+        end
     end
     
-    % 평균 CVE 계산
-    cve_lambda(l_idx) = cve_total / num_folds;
-    fprintf('Lambda %e, CVE: %f\n', lambda, cve_lambda(l_idx));
-end
-
-% % CVE의 표준 편차 계산 (삭제)
-% cve_std = std(cve_fold, 0, 2);  % 각 람다에 대한 표준 편차
-
-%% CVE vs 람다 그래프 그리기
-figure;
-plot(lambda_values, cve_lambda, 'b-', 'LineWidth', 1.5); % 에러바 제거
-hold on;
-
-% 최적 \(\lambda\) 포인트 찾기
-[~, min_idx] = min(cve_lambda);
-optimal_lambda = lambda_values(min_idx);
-
-% 최적 \(\lambda\) 포인트 표시
-semilogx(optimal_lambda, cve_lambda(min_idx), 'ro', 'MarkerSize', 10, 'LineWidth', 2);
-%ylim([1.983*28 1.9835*28]);
-
-% 레이블 및 제목
-xlabel('\lambda (정규화 파라미터)');
-ylabel('교차 검증 오류 (CVE)');
-title('로그 스케일 \lambda 에 따른 CVE 그래프');
-
-% 그리드 및 범례
-grid on;
-set(gca, 'XScale', 'log');  % X축 로그 스케일 설정
-legend({'CVE', '최적 \lambda'}, 'Location', 'best');
-
-hold off;
-
-%% 최적의 람다에 대한 γ의 평균과 95% 신뢰 구간 계산
-num_optimal_folds = num_folds;
-optimal_gamma_estimates = zeros(n, num_optimal_folds);
-
-for fold = 1:num_optimal_folds
-    optimal_gamma_estimates(:, fold) = gamma_estimates_all{min_idx, fold}; % 최적의 람다 인덱스에 해당하는 28개 fold - (세타-gamma) 가져오기 
-end
-
-% γ의 평균 및 표준 편차 계산
-gamma_mean = mean(optimal_gamma_estimates, 2);
-gamma_std = std(optimal_gamma_estimates, 0, 2);
-
-% 95% 신뢰 구간 계산
-gamma_se = gamma_std / sqrt(num_optimal_folds);  % 표준 오차
-t_value = tinv(0.975, num_optimal_folds - 1);    % 95% 신뢰 구간에 대한 t-값
-gamma_ci_lower = gamma_mean - t_value * gamma_se;
-gamma_ci_upper = gamma_mean + t_value * gamma_se;
-
-%% 최적의 람다로 전체 학습 데이터로 gamma 추정
-gamma_optimal = estimate_gamma(optimal_lambda, train_scenarios_full, ik_scenarios, V_sd_all, tau_discrete, delta_theta, L, OCV, R0, dt);
-
-%% 테스트 데이터로 전압 예측 및 에러 계산
-test_error = calculate_error(gamma_optimal, test_scenarios, ik_scenarios, V_sd_all, tau_discrete, delta_theta, OCV, R0, dt);
-disp(['Test Error with optimal lambda: ', num2str(test_error)]);
-
-%% 결과 플롯 (γ의 평균 및 95% 신뢰 구간)
-figure;
-hold on;
-plot(theta_discrete, gamma_discrete_true, 'k-', 'LineWidth', 1.5, 'DisplayName', 'True \gamma');
-errorbar(theta_discrete, gamma_mean, t_value * gamma_se, 'r--', 'LineWidth', 1.5, 'DisplayName', 'Estimated \gamma with 95% CI');
-xlabel('\theta = ln(\tau)');
-ylabel('\gamma');
-title(['True vs. Estimated \gamma with Optimal \lambda = ', num2str(optimal_lambda)]);
-legend('Location', 'Best');
-grid on;
-hold off;
-
-%% 테스트 시나리오의 전압 비교
-for s = test_scenarios
-    ik = ik_scenarios(s, :);
-    V_predicted = predict_voltage(gamma_optimal, ik, tau_discrete, delta_theta, OCV, R0, dt);
-    V_actual = V_sd_all(s, :);
+    % 상수 제거: OCV와 R0*ik를 빼줍니다.
+    y_adjusted_original = V_sd' - OCV - R0 * ik_original';
     
-    figure;
-    plot(t, V_actual, 'b-', 'LineWidth', 1.5, 'DisplayName', 'Actual Voltage');
-    hold on;
-    plot(t, V_predicted, 'r--', 'LineWidth', 1.5, 'DisplayName', 'Predicted Voltage');
+    % Quadprog를 위한 행렬 및 벡터 구성
+    H_original = 2 * (W_original' * W_original + lambda * (L' * L));
+    f_original = -2 * W_original' * y_adjusted_original;
+    
+    % 부등식 제약조건: gamma ≥ 0
+    A_ineq = -eye(n);
+    b_ineq = zeros(n, 1);
+    
+    % Quadprog 옵션 설정
+    options = optimoptions('quadprog', 'Display', 'off');
+    
+    % Quadprog를 사용하여 최적화 문제 해결
+    gamma_original = quadprog(H_original, f_original, A_ineq, b_ineq, [], [], [], [], [], options);
+    
+    % 원본 데이터로부터 구한 gamma 저장
+    gamma_original_all(s, :) = gamma_original';
+    
+    %% 부트스트랩을 통한 gamma 추정 (DRT Resample)
+    gamma_resample = zeros(N_resample, n);  % 부트스트랩으로 추정한 gamma 저장
+    
+    for b = 1:N_resample
+        % 부트스트랩 샘플링 (복원 추출)
+        idx_bootstrap = randsample(length(t_original), length(t_original), true);
+        t_bootstrap = t_original(idx_bootstrap);
+        ik_bootstrap = ik_original(idx_bootstrap);
+        V_sd_bootstrap = V_sd(idx_bootstrap);
+        
+        % 중복된 시간 점을 제거하고 고유한 시간 점 찾기
+        [t_bootstrap_unique, unique_idx] = unique(t_bootstrap);
+        ik_bootstrap_unique = ik_bootstrap(unique_idx);
+        V_sd_bootstrap_unique = V_sd_bootstrap(unique_idx);
+        
+        % 시간과 데이터를 시간 순서대로 정렬
+        [t_bootstrap_sorted, sort_idx] = sort(t_bootstrap_unique);
+        ik_bootstrap_sorted = ik_bootstrap_unique(sort_idx);
+        V_sd_bootstrap_sorted = V_sd_bootstrap_unique(sort_idx);
+        
+        % 시간 간격 계산
+        if length(t_bootstrap_sorted) > 1
+            dt_bootstrap = t_bootstrap_sorted(2:end) - t_bootstrap_sorted(1:end-1);  % dt(k) = t(k+1) - t(k)
+        else
+            dt_bootstrap = dt_original(1);  % 기본값으로 설정
+        end
+        
+        %% W 행렬 구성 (정렬된 부트스트랩 데이터로)
+        W_bootstrap = zeros(length(t_bootstrap_sorted), n);  % W 행렬 초기화
+        for k_idx = 1:length(t_bootstrap_sorted)
+            if k_idx == 1
+                dt_k = dt_bootstrap(1);
+                for i = 1:n
+                    W_bootstrap(k_idx, i) = ik_bootstrap_sorted(k_idx) * (1 - exp(-dt_k / tau_discrete(i))) * delta_theta;
+                end
+            elseif k_idx < length(t_bootstrap_sorted)
+                dt_k = dt_bootstrap(k_idx);
+                for i = 1:n
+                    W_bootstrap(k_idx, i) = W_bootstrap(k_idx-1, i) * exp(-dt_k / tau_discrete(i)) + ...
+                                      ik_bootstrap_sorted(k_idx) * (1 - exp(-dt_k / tau_discrete(i))) * delta_theta;
+                end
+            else
+                dt_k = dt_bootstrap(end);
+                for i = 1:n
+                    W_bootstrap(k_idx, i) = W_bootstrap(k_idx-1, i) * exp(-dt_k / tau_discrete(i)) + ...
+                                      ik_bootstrap_sorted(k_idx) * (1 - exp(-dt_k / tau_discrete(i))) * delta_theta;
+                end
+            end
+        end
+        
+        %% Quadprog를 이용한 정규화된 최소자승법 솔루션 (부트스트랩 데이터로)
+        % 상수 제거: OCV와 R0*ik를 빼줍니다.
+        y_adjusted_bootstrap = V_sd_bootstrap_sorted' - OCV - R0 * ik_bootstrap_sorted';
+        
+        % Quadprog를 위한 행렬 및 벡터 구성
+        H = 2 * (W_bootstrap' * W_bootstrap + lambda * (L' * L));
+        f = -2 * W_bootstrap' * y_adjusted_bootstrap;
+        
+        % Quadprog를 사용하여 최적화 문제 해결
+        gamma_quadprog = quadprog(H, f, A_ineq, b_ineq, [], [], [], [], [], options);
+        
+        %% 부트스트랩으로 구한 gamma 저장
+        gamma_resample(b, :) = gamma_quadprog';
+    end
+    
+    %% gamma 차이 계산 및 신뢰 구간 구하기
+    gamma_diff = gamma_resample - gamma_original';  % 각 세타에 대해 차이 계산
+    
+    % 5% 및 95% 백분위수 계산
+    gamma_diff_lower = prctile(gamma_diff, 5, 1);  % 5% 백분위수
+    gamma_diff_upper = prctile(gamma_diff, 95, 1); % 95% 백분위수
+    
+    %% 전압 및 DRT 비교 플롯
+    figure(1);  
+    subplot(5, 2, s);
+    yyaxis left
+    plot(t_original, ik_original, 'b-', 'LineWidth', 1.5);
+    ylabel('Current (A)');
     xlabel('Time (s)');
+    grid on;
+    
+    yyaxis right
+    plot(t_original, V_sd, 'r-', 'LineWidth', 1.5);
     ylabel('Voltage (V)');
-    title(['Voltage Comparison for Test Scenario ', num2str(s)]);
+    ylim([min(V_sd)-0.1, max(V_sd)+0.1]);
+    
+    % 제목 업데이트 (올바른 진폭과 주기 포함)
+    title(['Scenario ', num2str(s), ...
+           ': A1=', num2str(A(s,1)), ', A2=', num2str(A(s,2)), ', A3=', num2str(A(s,3)), ...
+           ', T1=', num2str(T(s,1)), ', T2=', num2str(T(s,2)), ', T3=', num2str(T(s,3))]);
+    
+    % 범례 추가
+    legend({'Current (A)', 'Voltage (V)'}, 'Location', 'best');
+    
+    % DRT 비교 플롯
+    figure(1 + s);  % 각 시나리오에 대한 DRT 비교 그림
+    hold on;
+    
+    % 실제 gamma 플롯 (True DRT)
+    plot(theta_discrete, gamma_discrete_true, 'k-', 'LineWidth', 1.5, 'DisplayName', 'True \gamma');
+    
+    % 원본 데이터로부터 구한 gamma 플롯 (DRT Original)
+    plot(theta_discrete, gamma_original_all(s, :), 'b-', 'LineWidth', 1.5, 'DisplayName', 'Original \gamma');
+    
+    % 에러바를 사용하여 gamma 차이의 5%-95% 범위 표시
+    errorbar(theta_discrete, gamma_original_all(s, :), -gamma_diff_lower, gamma_diff_upper, 'g.', 'LineWidth', 1.5, 'DisplayName', 'Resample \gamma (5%-95% CI)');
+    
+    hold off;
+    xlabel('\theta = ln(\tau)');
+    ylabel('\gamma');
+    title(['DRT Comparison for Scenario ', num2str(s), ' (\lambda = ', num2str(lambda), ')']);
     legend('Location', 'Best');
     grid on;
-    hold off;
-end
-
-%% 함수 정의
-
-% Gamma 추정 함수
-function [gamma_estimated] = estimate_gamma(lambda, train_scenarios, ik_scenarios, V_sd_all, tau_discrete, delta_theta, L, OCV, R0, dt)
-    % 학습 시나리오에서 W와 y_adjusted를 누적하여 구성
-    W_total = [];
-    y_total = [];
-    
-    for s = train_scenarios
-        ik = ik_scenarios(s, :);
-        V_sd = V_sd_all(s, :)';
-        
-        W_s = compute_W(ik, tau_discrete, delta_theta, dt);
-        y_s = V_sd - OCV - R0 * ik';
-        
-        % 누적
-        W_total = [W_total; W_s];
-        y_total = [y_total; y_s];
-    end
-    
-    % 정규화된 최소자승법으로 gamma 추정
-    gamma_estimated = (W_total' * W_total + lambda * (L' * L)) \ (W_total' * y_total);
-    
-end
-
-% 에러 계산 함수
-function error_total = calculate_error(gamma_estimated, val_scenarios, ik_scenarios, V_sd_all, tau_discrete, delta_theta, OCV, R0, dt)
-    error_total = 0;
-    
-    for s = val_scenarios
-        ik = ik_scenarios(s, :);
-        V_predicted = predict_voltage(gamma_estimated, ik, tau_discrete, delta_theta, OCV, R0, dt);
-        V_actual = V_sd_all(s, :);
-        
-        % 전압 차이의 제곱 합산
-        error_total = error_total + sum((V_predicted - V_actual).^2);
-    end
-end
-
-% W 행렬 계산 함수
-function W = compute_W(ik, tau_discrete, delta_theta, dt)
-    n = length(tau_discrete);
-    len_t = length(ik);
-    W = zeros(len_t, n);  % Initialize W matrix
-    
-    for k_idx = 1:len_t
-        if k_idx == 1
-            for i = 1:n
-                W(k_idx, i) = ik(k_idx) * (1 - exp(-dt / tau_discrete(i))) * delta_theta;
-            end
-        else
-            for i = 1:n
-                W(k_idx, i) = W(k_idx-1, i) * exp(-dt / tau_discrete(i)) + ...
-                              ik(k_idx) * (1 - exp(-dt / tau_discrete(i))) * delta_theta;
-            end
-        end
-    end
-end
-
-% 전압 예측 함수
-function V_predicted = predict_voltage(gamma_estimated, ik, tau_discrete, delta_theta, OCV, R0, dt)
-    len_t = length(ik);
-    n = length(gamma_estimated);
-    V_predicted = zeros(1, len_t);
-    V_RC = zeros(n, len_t);
-    
-    for k_idx = 1:len_t
-        if k_idx == 1
-            for i = 1:n
-                V_RC(i, k_idx) = gamma_estimated(i) * ik(k_idx) * (1 - exp(-dt / tau_discrete(i))) * delta_theta;
-            end
-        else
-            for i = 1:n
-                V_RC(i, k_idx) = V_RC(i, k_idx-1) * exp(-dt / tau_discrete(i)) + ...
-                                 gamma_estimated(i) * ik(k_idx) * (1 - exp(-dt / tau_discrete(i))) * delta_theta;
-            end
-        end
-        V_predicted(k_idx) = OCV + R0 * ik(k_idx) + sum(V_RC(:, k_idx));
-    end
 end
