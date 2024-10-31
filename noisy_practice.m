@@ -3,7 +3,7 @@ clear;
 close all;
 
 % Load UDDS data
-load('C:\Users\김준연\Desktop\wykht8y7tg-1\Panasonic 18650PF Data\Panasonic 18650PF Data\25degC\Drive cycles\03-21-17_00.29 25degC_UDDS_Pan18650PF.mat');
+load('G:\공유 드라이브\BSL_Data3\Driving cycles\03-21-17_00.29 25degC_UDDS_Pan18650PF.mat');
 
 % Load UDDS data
 udds_current = meas.Current; % UDDS 전류 데이터
@@ -12,8 +12,8 @@ udds_time = meas.Time; % UDDS 시간 데이터
 
 % 파라미터 설정
 n = 21;                    % 상태의 개수
-sigma = 1e-3;              % 노이즈 분포의 표준편차 (1 mA)
-noise_levels = linspace(-2e-3, 2e-3, n); % -2mA에서 +2mA로 21개 구간
+sigma = 1e-1;              % 노이즈 분포의 표준편차 (1 mA)
+noise_levels = linspace(-2e-1, 2e-1, n); % -2mA에서 +2mA로 21개 구간
 
 % 전이 상태 행렬 P 초기화
 P = zeros(n, n);

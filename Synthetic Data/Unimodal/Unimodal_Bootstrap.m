@@ -217,6 +217,7 @@ for s = 1:num_scenarios
     gamma_diff_upper = prctile(gamma_diff, 95, 1); % 95% 백분위수
     
     %% 전압 및 DRT 비교 플롯
+    %% 전압 및 DRT 비교 플롯
     figure(1);  
     subplot(5, 2, s);
     yyaxis left
@@ -238,23 +239,35 @@ for s = 1:num_scenarios
     % 범례 추가
     legend({'Current (A)', 'Voltage (V)'}, 'Location', 'best');
     
-    % DRT 비교 플롯
-    figure(1 + s);  % 각 시나리오에 대한 DRT 비교 그림
+    % DRT comparison plot for each scenario
+    figure(1 + s);  % 각 시나리오의 DRT 비교를 위한 새 figure 생성
     hold on;
     
-    % 실제 gamma 플롯 (True DRT)
-    plot(theta_discrete, gamma_discrete_true, 'k-', 'LineWidth', 1.5, 'DisplayName', 'True \gamma');
+    % True gamma plot (True DRT) as a black solid line
+    plot(theta_discrete, gamma_discrete_true, 'k-', 'LineWidth', 3, 'DisplayName', 'True');
     
-    % 원본 데이터로부터 구한 gamma 플롯 (DRT Original)
-    plot(theta_discrete, gamma_original_all(s, :), 'b-', 'LineWidth', 1.5, 'DisplayName', 'Original \gamma');
+    % Original gamma values with square markers, outline only in red
+    plot(theta_discrete, gamma_original_all(s, :), 's-', ...
+         'MarkerFaceColor', 'none', ...      % 마커 내부를 투명하게 설정
+         'MarkerEdgeColor', 'r', ...        % 마커 외곽선을 빨간색으로 설정
+         'Color', 'r', ...                  % 선 색상을 빨간색으로 설정
+         'LineWidth', 1, ...
+         'DisplayName', 'Est');
     
-    % 에러바를 사용하여 gamma 차이의 5%-95% 범위 표시
-    errorbar(theta_discrete, gamma_original_all(s, :), -gamma_diff_lower, gamma_diff_upper, 'g.', 'LineWidth', 1.5, 'DisplayName', 'Resample \gamma (5%-95% CI)');
+    % Error bars for resampling results with red color
+    errorbar(theta_discrete, gamma_original_all(s, :), -gamma_diff_lower, gamma_diff_upper, 's', ...
+             'MarkerFaceColor', 'none', ...    % 마커 내부를 투명하게 설정
+             'MarkerEdgeColor', 'r', ...      % 마커 외곽선을 빨간색으로 설정
+             'Color', 'r', ...                % 에러바 색상을 빨간색으로 설정
+             'LineWidth', 1.5, ...
+             'HandleVisibility', 'off');        % 레전드에 포함되지 않도록 설정
     
     hold off;
     xlabel('\theta = ln(\tau)');
     ylabel('\gamma');
     title(['DRT Comparison for Scenario ', num2str(s), ' (\lambda = ', num2str(lambda), ')']);
-    legend('Location', 'Best');
-    grid on;
+    legend('True', 'Est', 'Location', 'Best');  % 레전드를 "True"와 "Est"로 설정
+
+
+    
 end

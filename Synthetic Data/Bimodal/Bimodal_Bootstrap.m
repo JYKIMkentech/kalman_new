@@ -10,20 +10,20 @@ clc; clear; close all;
 load('AS1.mat');  % A, T, ik_scenarios, t 변수를 불러옵니다.
 
 %% Parameters 
-n = 40;  % 이산화 요소의 개수
+n = 41;  % 이산화 요소의 개수
 num_scenarios = 10;  % 전류 시나리오의 수
-lambda = 0.51795;  % 정규화 파라미터
+lambda = 0.153;  % 정규화 파라미터
 N_resample = 200;  % 부트스트랩 샘플 수
 
 %% DRT - Bimodal Distribution
 
 % 첫 번째 모달의 파라미터
 mu_theta1 = log(10);       % 첫 번째 모달의 평균 값
-sigma_theta1 = 0.5;        % 첫 번째 모달의 표준편차 값
+sigma_theta1 = 1;        % 첫 번째 모달의 표준편차 값
 
 % 두 번째 모달의 파라미터
-mu_theta2 = log(100);      % 두 번째 모달의 평균 값
-sigma_theta2 = 0.5;        % 두 번째 모달의 표준편차 값
+mu_theta2 = log(120);      % 두 번째 모달의 평균 값
+sigma_theta2 = 0.7;        % 두 번째 모달의 표준편차 값
 
 % 이산화된 theta 값들
 theta_min = mu_theta1 - 3*sigma_theta1;
@@ -263,5 +263,5 @@ for s = 1:num_scenarios
     ylabel('\gamma');
     title(['DRT Comparison for Scenario ', num2str(s), ' (\lambda = ', num2str(lambda), ')']);
     legend('Location', 'Best');
-    grid on;
+    
 end
