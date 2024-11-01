@@ -171,10 +171,6 @@ try
             R1_initial = F_R1(initial_soc, Crate_current_initial);
             C1_initial = F_C1(initial_soc, Crate_current_initial);
 
-            % 음수나 0 방지
-            %R1_initial = max(R1_initial, 1e-5);
-            %C1_initial = max(C1_initial, 1e-5);
-
             % 초기 V1_est_HPPC 계산
             dt_initial = dt(1); % 첫 시간 간격
             V1_init_HPPC = trip_current(1) * R1_initial * (1 - exp(-dt_initial / (R1_initial * C1_initial)));
@@ -269,11 +265,6 @@ try
             R0_interp = F_R0(SOC_pred_HPPC, Crate_current);
             R1_interp = F_R1(SOC_pred_HPPC, Crate_current);
             C1_interp = F_C1(SOC_pred_HPPC, Crate_current);
-
-            % 음수나 0 방지
-            R0_interp = max(R0_interp, 1e-5);
-            R1_interp = max(R1_interp, 1e-5);
-            C1_interp = max(C1_interp, 1e-5);
 
             % 상태 천이 행렬 및 입력 행렬
             A_k_HPPC = [1, 0;
