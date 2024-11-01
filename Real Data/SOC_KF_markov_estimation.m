@@ -244,12 +244,10 @@ try
 
             %% True SOC 계산 (쿨롱 카운팅)
             SOC_true = SOC_save_true(k-1) + (dt_k / (Config.cap * 3600)) * ik * Config.coulomb_efficiency;
-            SOC_true = max(0, min(1, SOC_true));
             SOC_save_true(k) = SOC_true;
 
             %% CC SOC 계산 (노이즈가 추가된 전류로 쿨롱 카운팅)
             SOC_CC = SOC_save_CC(k-1) + (dt_k / (Config.cap * 3600)) * noisy_ik * Config.coulomb_efficiency;
-            SOC_CC = max(0, min(1, SOC_CC));
             SOC_save_CC(k) = SOC_CC;
 
             %% HPPC 기반 칼만 필터 업데이트
@@ -300,7 +298,6 @@ try
 
             % 상태 업데이트
             X_est_HPPC = X_pred_HPPC + K_HPPC * y_tilde_HPPC;
-            X_est_HPPC(1) = max(0, min(1, X_est_HPPC(1))); % SOC 범위 제한
 
             % 공분산 업데이트
             P_HPPC = (eye(2) - K_HPPC * H_k_HPPC) * P_predict_HPPC;
@@ -346,7 +343,7 @@ try
             Vt_pred_DRT = OCV_pred_DRT + R0_est_all(trip_num) * noisy_ik + sum(V_RC_pred);
 
             % 관측 행렬 H_DRT 계산
-            delta_SOC = 1e-5;
+            delta_SOC = 1e-10;
             OCV_plus = interp1(unique_soc_values, unique_ocv_values, SOC_pred_DRT + delta_SOC, 'linear', 'extrap');
             OCV_minus = interp1(unique_soc_values, unique_ocv_values, SOC_pred_DRT - delta_SOC, 'linear', 'extrap');
             dOCV_dSOC = (OCV_plus - OCV_minus) / (2 * delta_SOC);
@@ -364,7 +361,6 @@ try
 
             % 상태 업데이트
             X_est_DRT = X_pred_DRT + K_DRT * y_tilde_DRT;
-            X_est_DRT(1) = max(0, min(1, X_est_DRT(1))); % SOC 범위 제한
 
             % 공분산 업데이트
             P_DRT = (eye(state_dimension) - K_DRT * H_DRT) * P_pred_DRT;
