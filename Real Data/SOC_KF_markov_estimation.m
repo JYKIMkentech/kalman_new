@@ -28,6 +28,7 @@ load('udds_data.mat'); % 구조체 배열 'udds_data'로 V, I, t, Time_duration,
 I_1C = 2.8892;           % 1C 전류 [A]
 Config.cap = 2.90;       % 명목 용량 [Ah]
 Config.coulomb_efficiency = 1; % 쿨롱 효율
+n = 21; % noise vector 갯수
 
 % OCV 중복 값 제거 (보간을 위해)
 [unique_ocv_values, unique_idx] = unique(ocv_values);
@@ -135,9 +136,9 @@ try
         %% 7.2. 전류에 Markov Noise 추가
         % Markov Noise 파라미터 설정
         n = 21;
-        noise_scale = 0.03;
-        sigma = (max(trip_current) * noise_scale - min(trip_current) * noise_scale) / 3;
-        initial_state = 1; % 필요에 따라 변경
+        noise_scale = 0.05;
+        sigma = (max(trip_current) * noise_scale - min(trip_current) * noise_scale) / 50;
+        initial_state = 10; % 필요에 따라 변경
 
         % 전류에 노이즈 추가
         [noisy_trip_current, states_trip_current] = add_markov_noise(trip_current, n, sigma, noise_scale, initial_state);

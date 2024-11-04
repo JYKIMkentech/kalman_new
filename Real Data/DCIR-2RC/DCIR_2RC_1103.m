@@ -162,6 +162,13 @@ optimized_params_struct_final_ver2_2RC = struct('R0', [], 'R1', [], 'C1', [], 'R
 % 초기 추정값 개수 설정
 num_start_points = 10; % 원하는 시작점의 개수 설정
 
+%% 2RC 모델을 위한 최적화 구조체 생성
+% 새로운 2RC 결과 저장을 위한 구조체 초기화
+optimized_params_struct_final_ver2_2RC = struct('R0', [], 'R1', [], 'C1', [], 'R2', [], 'C2', [], 'SOC', [], 'Crate', []);
+
+% 초기 추정값 개수 설정
+num_start_points = 10; % 원하는 시작점의 개수 설정
+
 %% 2RC 모델 최적화 루프
 for idx = 1:length(step_dis)
     i = step_dis(idx);
@@ -187,8 +194,8 @@ for idx = 1:length(step_dis)
     end
 
     % 초기 추정값 생성 (R2, C2)
-    R2_init = R1* 0.1; % 초기 추정값 예시: R1의 10%
-    C2_init = C1* 0.1; % 초기 추정값 예시: C1의 10%
+    R2_init = R1 * 1.1; % 초기 추정값 
+    C2_init = C1 * 1.1; % 초기 추정값 
 
     initial_guess = [R2_init, C2_init];
 
@@ -198,7 +205,7 @@ for idx = 1:length(step_dis)
         'objective', @(params) cost_function(params, time_exp, deltaV_exp, avgI, R0, R1, C1), ...
         'x0', initial_guess, ...
         'lb', [0, 0], ...
-        'ub', [], ...
+        'ub', [2.5, inf], ...  % R2의 상한 두기
         'options', options);
     ms = MultiStart('Display', 'off');
 
@@ -378,7 +385,7 @@ create_plots(SG, CG, C2_grid, 'C2');
 % saveas(gcf, 'C2_plot.png');
 
 %% 결과 저장
-% save('optimized_params_struct_final_ver2_2RC.mat', 'optimized_params_struct_final_ver2_2RC');
+save('optimized_params_struct_final_ver2_2RC.mat', 'optimized_params_struct_final_ver2_2RC');
 
 %% 함수 정의
 % 모든 함수는 스크립트의 끝에 위치합니다.
