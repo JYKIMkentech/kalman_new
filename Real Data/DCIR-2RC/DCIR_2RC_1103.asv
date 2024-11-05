@@ -1,6 +1,6 @@
 clc; clear; close all;
 
-%% 데이터 load
+%% 데이터 로드
 % 1RC 모델 결과 로드
 load('optimized_params_struct_final_ver2.mat'); % 1RC 모델 결과 로드
 
@@ -164,7 +164,7 @@ for idx = 1:length(step_dis)
     avgI = data(i).avgI;  % 각 스텝의 평균 전류 가져오기
 
     % 1RC 모델에서 R0, R1, C1 가져오기
-    R0 = R0_values(idx);
+    R0 = optimized_params_struct_final_ver2(idx).R0;
     R1 = R1_values(idx);
     C1 = C1_values(idx);
 
@@ -239,6 +239,7 @@ for idx = 1:length(step_dis)
         soc = data(i).SOC; 
         crate = optimized_params_struct_final_ver2_2RC(idx).Crate;
 
+        
         % Generate model voltage
         voltage_model = model_func(time_exp, optimized_R0, optimized_R1, optimized_R2, optimized_C1, optimized_C2, avgI);
 
