@@ -1,6 +1,6 @@
 clc; clear; close all;
 
-%% 데이터 load
+%% 데이터 로드
 % 1RC 모델 결과 로드
 load('optimized_params_struct_final_ver2.mat'); % 1RC 모델 결과 로드
 
@@ -239,6 +239,7 @@ for idx = 1:length(step_dis)
         soc = data(i).SOC; 
         crate = optimized_params_struct_final_ver2_2RC(idx).Crate;
 
+
         % Generate model voltage
         voltage_model = model_func(time_exp, optimized_R0, optimized_R1, optimized_R2, optimized_C1, optimized_C2, avgI);
 
@@ -302,6 +303,114 @@ create_plots(SG, CG, R1_grid, 'R1');
 create_plots(SG, CG, R2_grid, 'R2');
 create_plots(SG, CG, C1_grid, 'C1');
 create_plots(SG, CG, C2_grid, 'C2');
+
+%% 0.5C 인것만 추출
+
+% Crate 값을 추출
+Crate_values = [optimized_params_struct_final_ver2_2RC.Crate];
+
+% Crate가 0.5와 가까운 인덱스 찾기 (부동소수점 오차를 고려하여)
+tolerance = 1e-3;
+indices_05C = abs(Crate_values - 0.5) < tolerance;
+
+% 필터링된 인덱스가 있는지 확인
+if any(indices_05C)
+    % 새로운 구조체 배열 생성
+    optimized_params_struct_final_ver2_2RC_05C = optimized_params_struct_final_ver2_2RC(indices_05C);
+    
+    % 새로운 구조체가 비어있지 않다면 저장
+    save('optimized_params_struct_final_ver2_2RC_05C.mat', 'optimized_params_struct_final_ver2_2RC_05C');
+    disp(['Crate가 0.5인 항목을 ', num2str(sum(indices_05C)), '개 저장하였습니다.']);
+else
+    warning('Crate가 0.5인 항목이 존재하지 않습니다.');
+end
+
+%% 0.5C에 해당하는 데이터로 추가 플로팅
+
+% Crate가 0.5인 데이터가 존재하는지 확인
+if any(indices_05C)
+    % 0.5C에 해당하는 인덱스 가져오기
+    idx_05C = find(indices_05C);
+    % 해당하는 step_dis의 인덱스 가져오기
+    steps_05C = step_dis(idx_05C);
+    
+    % 플로팅 설정
+    plots_per_fig = 9; % 한 Figure에 9개의 subplot (3x3)
+    num_figures = ceil(length(steps_05C) / plots_per_fig);
+    fig_counter = 1;
+    subplot_idx = 1;
+    
+    figure(fig_counter + 100); % 기존 Figure 번호와 겹치지 않도록 +100
+    set(gcf, 'Units', 'pixels', 'Position', [100, 100, 1200, 800]); % Figure 크기 설정
+    sgtitle('Crate = 0.5인 경우의 실험 데이터와 2RC 모델 비교');
+    
+    for idx = 1:length(steps_05C)
+        i = steps_05C(idx);
+        
+        if (data(i).t(end) - data(i).t(1)) >= 0
+            if subplot_idx > plots_per_fig
+                fig_counter = fig_counter + 1;
+                figure(fig_counter + 100);
+                set(gcf, 'Units', 'pixels', 'Position', [100, 100, 1200, 800]);
+                sgtitle('Crate = 0.5인 경우의 실험 데이터와 2RC 모델 비교');
+                subplot_idx = 1;
+            end
+
+            subplot(3, 3, subplot_idx);
+            hold on;
+
+            deltaV_exp = data(i).deltaV;
+            time_exp = data(i).t - data(i).t(1); 
+            avgI = data(i).avgI;
+            % 최적화된 파라미터 가져오기
+            optimized_R0 = optimized_params_struct_final_ver2_2RC(idx_05C(idx)).R0;
+            optimized_R1 = optimized_params_struct_final_ver2_2RC(idx_05C(idx)).R1;
+            optimized_C1 = optimized_params_struct_final_ver2_2RC(idx_05C(idx)).C1;
+            optimized_R2 = optimized_params_struct_final_ver2_2RC(idx_05C(idx)).R2;
+            optimized_C2 = optimized_params_struct_final_ver2_2RC(idx_05C(idx)).C2;
+            soc = data(i).SOC; 
+            crate = optimized_params_struct_final_ver2_2RC(idx_05C(idx)).Crate;
+
+            % 모델 전압 계산
+            voltage_model = model_func(time_exp, optimized_R0, optimized_R1, optimized_R2, optimized_C1, optimized_C2, avgI);
+
+            % 실험 데이터 플로팅
+            plot(time_exp, deltaV_exp, 'b-', 'LineWidth', 1.5, 'DisplayName', '실험 데이터');
+
+            % 모델 결과 플로팅
+            plot(time_exp, voltage_model, 'r--', 'LineWidth', 1.5, 'DisplayName', '2RC 모델 결과');
+
+            % 63.2% 시간 표시
+            if exist('xline', 'file')
+                xline(data(i).timeAt632 - data(i).t(1), 'k--', 'LineWidth', 1.0, 'DisplayName', '63.2% 시간');
+            else
+                ylim_current = ylim;
+                line([data(i).timeAt632 - data(i).t(1), data(i).timeAt632 - data(i).t(1)], ylim_current, 'Color', 'k', 'LineStyle', '--', 'DisplayName', '63.2% 시간');
+            end
+
+            % SOC와 C-rate 정보 추가
+            soc_text = sprintf('SOC: %.2f%%', soc * 100);
+            crate_text = sprintf('C-rate: %.2f', crate);
+            text(time_exp(1) + 0.05*(time_exp(end)-time_exp(1)), ...
+                 max(deltaV_exp)*0.9, ...
+                 {soc_text, crate_text}, 'FontSize', 8, 'Color', 'k', 'FontWeight', 'bold');
+
+            xlabel('시간 (sec)', 'FontSize', 8);
+            ylabel('전압 강하 (V)', 'FontSize', 8);
+            title(sprintf('Discharge Step %d', i), 'FontSize', 10);
+            legend('Location', 'best', 'FontSize', 6);
+            grid on;
+
+            hold off;
+
+            subplot_idx = subplot_idx + 1;
+        end
+    end
+else
+    warning('Crate가 0.5인 항목이 존재하지 않아 추가 플로팅을 수행하지 않습니다.');
+end
+
+
 
 
 %% 결과 저장
