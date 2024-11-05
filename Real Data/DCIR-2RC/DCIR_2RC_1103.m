@@ -310,17 +310,22 @@ create_plots(SG, CG, C2_grid, 'C2');
 Crate_values = [optimized_params_struct_final_ver2_2RC.Crate];
 
 % Crate가 0.5와 가까운 인덱스 찾기 (부동소수점 오차를 고려하여)
-tolerance = 1e-3;
+tolerance = 1e-2;
 indices_05C = abs(Crate_values - 0.5) < tolerance;
 
-% 필터링된 인덱스가 있는지 확인
-if any(indices_05C)
-    % 새로운 구조체 배열 생성
-    optimized_params_struct_final_ver2_2RC_05C = optimized_params_struct_final_ver2_2RC(indices_05C);
-    
-    % 새로운 구조체가 비어있지 않다면 저장
+% 인덱스 추출
+indices = find(indices_05C); % 예: [1, 6, 11, ...]
+
+% 새로운 구조체 배열 생성
+optimized_params_struct_final_ver2_2RC_05C = optimized_params_struct_final_ver2_2RC(indices);
+
+% 해당하는 step_dis의 인덱스 가져오기
+steps_05C = step_dis(indices);
+
+% 새로운 구조체가 비어있지 않다면 저장
+if ~isempty(optimized_params_struct_final_ver2_2RC_05C)
     save('optimized_params_struct_final_ver2_2RC_05C.mat', 'optimized_params_struct_final_ver2_2RC_05C');
-    disp(['Crate가 0.5인 항목을 ', num2str(sum(indices_05C)), '개 저장하였습니다.']);
+    disp(['Crate가 0.5인 항목을 ', num2str(length(indices)), '개 저장하였습니다.']);
 else
     warning('Crate가 0.5인 항목이 존재하지 않습니다.');
 end
@@ -328,12 +333,7 @@ end
 %% 0.5C에 해당하는 데이터로 추가 플로팅
 
 % Crate가 0.5인 데이터가 존재하는지 확인
-if any(indices_05C)
-    % 0.5C에 해당하는 인덱스 가져오기
-    idx_05C = find(indices_05C);
-    % 해당하는 step_dis의 인덱스 가져오기
-    steps_05C = step_dis(idx_05C);
-    
+if ~isempty(indices)
     % 플로팅 설정
     plots_per_fig = 9; % 한 Figure에 9개의 subplot (3x3)
     num_figures = ceil(length(steps_05C) / plots_per_fig);
@@ -345,7 +345,7 @@ if any(indices_05C)
     sgtitle('Crate = 0.5인 경우의 실험 데이터와 2RC 모델 비교');
     
     for idx = 1:length(steps_05C)
-        i = steps_05C(idx);
+        i = steps_05C(idx); % 데이터의 스텝 인덱스
         
         if (data(i).t(end) - data(i).t(1)) >= 0
             if subplot_idx > plots_per_fig
@@ -362,14 +362,15 @@ if any(indices_05C)
             deltaV_exp = data(i).deltaV;
             time_exp = data(i).t - data(i).t(1); 
             avgI = data(i).avgI;
+            
             % 최적화된 파라미터 가져오기
-            optimized_R0 = optimized_params_struct_final_ver2_2RC(idx_05C(idx)).R0;
-            optimized_R1 = optimized_params_struct_final_ver2_2RC(idx_05C(idx)).R1;
-            optimized_C1 = optimized_params_struct_final_ver2_2RC(idx_05C(idx)).C1;
-            optimized_R2 = optimized_params_struct_final_ver2_2RC(idx_05C(idx)).R2;
-            optimized_C2 = optimized_params_struct_final_ver2_2RC(idx_05C(idx)).C2;
+            optimized_R0 = optimized_params_struct_final_ver2_2RC_05C(idx).R0;
+            optimized_R1 = optimized_params_struct_final_ver2_2RC_05C(idx).R1;
+            optimized_C1 = optimized_params_struct_final_ver2_2RC_05C(idx).C1;
+            optimized_R2 = optimized_params_struct_final_ver2_2RC_05C(idx).R2;
+            optimized_C2 = optimized_params_struct_final_ver2_2RC_05C(idx).C2;
             soc = data(i).SOC; 
-            crate = optimized_params_struct_final_ver2_2RC(idx_05C(idx)).Crate;
+            crate = optimized_params_struct_final_ver2_2RC_05C(idx).Crate;
 
             % 모델 전압 계산
             voltage_model = model_func(time_exp, optimized_R0, optimized_R1, optimized_R2, optimized_C1, optimized_C2, avgI);
