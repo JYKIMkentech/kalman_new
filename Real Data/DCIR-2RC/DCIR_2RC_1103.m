@@ -134,6 +134,7 @@ end
 soc_values = [1, 0.95, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.25, 0.2, 0.15, 0.1, 0.05];
 steps_per_level = 5;
 
+% SOC 배열 초기화
 SOC = zeros(length(step_dis), 1);
 current_index = 1;
 
@@ -141,15 +142,14 @@ for i = 1:length(soc_values)
     end_index = min(current_index + steps_per_level - 1, length(step_dis));
     SOC(current_index:end_index) = soc_values(i);
     current_index = end_index + 1;
-    if current_index > length(step_dis)
-        break;
-    end
 end
 
+% step_dis 배열을 사용하여 데이터에 SOC 값 할당
 for i = 1:length(step_dis)
     data(step_dis(i)).SOC = SOC(i);
 end
 
+data(130).SOC = 0.05;
 
 %% 2RC 모델 optmizied struct 생성
 optimized_params_struct_final_ver2_2RC = struct('R0', [], 'R1', [], 'C1', [], 'R2', [], 'C2', [], 'SOC', [], 'Crate', []);
